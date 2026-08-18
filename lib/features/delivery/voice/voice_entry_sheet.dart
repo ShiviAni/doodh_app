@@ -34,11 +34,19 @@ class VoiceEntrySheet extends StatefulWidget {
     super.key,
     required this.customers,
     required this.speech,
+    required this.localeId,
     this.fixedCustomer,
   });
 
   final List<Customer> customers;
   final SpeechService speech;
+
+  /// Resolved by the caller, which has a settled context.
+  ///
+  /// Listening starts from initState, and reading an InheritedWidget there is
+  /// illegal — doing so threw before listen() was ever reached, leaving the
+  /// sheet showing "speak now" while the microphone was never opened.
+  final String localeId;
 
   /// Set when opened from a house's own card — then only the quantity is
   /// listened for and the name is not second-guessed.
@@ -56,6 +64,9 @@ class VoiceEntrySheet extends StatefulWidget {
     builder: (_) => VoiceEntrySheet(
       customers: customers,
       speech: speech,
+      // Resolved here, where the context is settled — the sheet's own
+      // initState cannot read it.
+      localeId: S.of(context).lang == AppLanguage.hindi ? 'hi_IN' : 'en_IN',
       fixedCustomer: fixedCustomer,
     ),
   );
@@ -120,9 +131,8 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
       });
     });
 
-    final hindi = S.of(context).lang == AppLanguage.hindi;
     await widget.speech.listen(
-      localeId: hindi ? 'hi_IN' : 'en_IN',
+      localeId: widget.localeId,
       onError: (_) {
         if (!mounted) return;
         _watchdog?.cancel();
