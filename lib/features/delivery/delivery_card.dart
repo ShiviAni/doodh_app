@@ -19,10 +19,15 @@ class DeliveryCard extends StatefulWidget {
     required this.customer,
     required this.existing,
     required this.onRecord,
+    this.initialQty,
   });
 
   final Customer customer;
   final Delivery? existing;
+
+  /// Overrides the usual amount — set when a quantity arrived by voice, so the
+  /// card opens on what he said rather than on the default.
+  final double? initialQty;
   final void Function(double qtyLitres, DeliveryStatus status) onRecord;
 
   @override
@@ -33,6 +38,7 @@ class _DeliveryCardState extends State<DeliveryCard> {
   late double _qty = _initialQty();
 
   double _initialQty() {
+    if (widget.initialQty != null) return widget.initialQty!;
     final prior = widget.existing;
     // Re-opening an already-recorded house shows what was actually recorded,
     // so a correction starts from the real value rather than the default.
@@ -45,6 +51,7 @@ class _DeliveryCardState extends State<DeliveryCard> {
     super.didUpdateWidget(old);
     // The card is reused as the round advances; reset for the new house.
     if (old.customer.id != widget.customer.id ||
+        old.initialQty != widget.initialQty ||
         old.existing?.qtyLitres != widget.existing?.qtyLitres) {
       _qty = _initialQty();
     }

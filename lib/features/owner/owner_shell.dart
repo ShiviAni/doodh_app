@@ -60,6 +60,11 @@ class _OwnerShellState extends State<OwnerShell> {
             label: s.tabToday,
           ),
           NavigationDestination(
+            icon: const Icon(Icons.history_outlined),
+            selectedIcon: const Icon(Icons.history),
+            label: s.tabHistory,
+          ),
+          NavigationDestination(
             icon: const Icon(Icons.bar_chart_outlined),
             selectedIcon: const Icon(Icons.bar_chart),
             label: s.tabReports,

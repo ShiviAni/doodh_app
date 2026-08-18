@@ -12,6 +12,7 @@ import '../../data/repositories/payment_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../features/auth/auth_service.dart';
+import '../../features/delivery/voice/speech_service.dart';
 import '../../features/notifications/push_service.dart';
 import '../l10n/strings.dart';
 
@@ -31,10 +32,19 @@ Future<void> setupInjector({
   // Offline-first. Firestore keeps the pending write queue on disk, so entries
   // recorded with no signal survive an app kill and replay on reconnect —
   // which is the whole reason the round can be walked offline.
-  db.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  //
+  // The in-memory fake used by the demo entrypoint and the tests has no
+  // settings to configure, and is already entirely local.
+  try {
+    db.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } on UnimplementedError {
+    // Fake Firestore — nothing to configure.
+  } on NoSuchMethodError {
+    // Fake Firestore — nothing to configure.
+  }
 
   final prefs = await SharedPreferences.getInstance();
   sl.registerSingleton<SharedPreferences>(prefs);
@@ -49,6 +59,9 @@ Future<void> setupInjector({
   sl.registerSingleton<ActivityRepository>(ActivityRepository(refs));
   sl.registerSingleton<ReportCalculator>(const ReportCalculator());
   sl.registerSingleton<PushService>(PushService(refs));
+  // Single instance: initialising the recogniser is slow, so it is warmed once
+  // and reused for every mic tap.
+  sl.registerSingleton<SpeechService>(DeviceSpeechService());
   sl.registerSingleton<AuthService>(
     AuthService(auth ?? FirebaseAuth.instance, sl<MemberRepository>()),
   );

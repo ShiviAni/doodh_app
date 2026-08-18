@@ -86,20 +86,40 @@ class RoundController extends ChangeNotifier {
     }
   }
 
-  /// Record the house on screen and advance.
+  /// Record the house currently on screen, then move to the next one.
+  void record({required double qtyLitres, required DeliveryStatus status}) {
+    final customer = current;
+    if (customer == null) return;
+    recordFor(
+      customerId: customer.id,
+      qtyLitres: qtyLitres,
+      status: status,
+      advance: true,
+    );
+  }
+
+  /// Record any house by id.
+  ///
+  /// The list and the voice entry both call this, since neither has a notion
+  /// of a "current" house — he taps or names whichever one he just served.
   ///
   /// The Firestore write is deliberately **not awaited**: it lands in the local
   /// cache immediately, but the returned future only completes once the server
   /// acknowledges — which never happens while offline. Awaiting here would
   /// freeze the round the moment signal drops.
-  void record({required double qtyLitres, required DeliveryStatus status}) {
-    final customer = current;
-    if (customer == null) return;
+  void recordFor({
+    required String customerId,
+    required double qtyLitres,
+    required DeliveryStatus status,
+    bool advance = false,
+  }) {
+    final index = _customers.indexWhere((c) => c.id == customerId);
+    if (index == -1) return;
 
     unawaited(
       deliveries.record(
         dayKey: dayKey,
-        customerId: customer.id,
+        customerId: customerId,
         qtyLitres: qtyLitres,
         status: status,
         recordedBy: recordedBy,
@@ -107,13 +127,13 @@ class RoundController extends ChangeNotifier {
     );
 
     // Reflect it locally right away. The snapshot listener will confirm the
-    // same value a moment later; showing it now keeps the button responsive.
+    // same value a moment later; showing it now keeps the row responsive.
     _recorded = {
       ..._recorded,
-      customer.id: Delivery(
-        id: DateKeys.deliveryId(dayKey, customer.id),
+      customerId: Delivery(
+        id: DateKeys.deliveryId(dayKey, customerId),
         dayKey: dayKey,
-        customerId: customer.id,
+        customerId: customerId,
         qtyLitres: status == DeliveryStatus.skipped ? 0 : qtyLitres,
         status: status,
         recordedBy: recordedBy,
@@ -121,7 +141,7 @@ class RoundController extends ChangeNotifier {
       ),
     };
 
-    if (_index < _customers.length - 1) _index++;
+    if (advance && _index < _customers.length - 1) _index++;
     notifyListeners();
   }
 }

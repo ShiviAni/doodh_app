@@ -36,6 +36,18 @@ class PushService {
   /// notified of his own work, and registering his device would put a delivery
   /// phone in the owner-token list.
   Future<void> startForOwner() async {
+    // Notifications are an addition to the dashboard, not a prerequisite for
+    // it. If messaging is unavailable — permission refused, Play Services
+    // missing, Firebase not configured — the owner should still get every
+    // screen, with the History tab covering what the push would have said.
+    try {
+      await _start();
+    } catch (e) {
+      debugPrint('Push unavailable, continuing without it: $e');
+    }
+  }
+
+  Future<void> _start() async {
     final messaging = FirebaseMessaging.instance;
 
     final settings = await messaging.requestPermission();

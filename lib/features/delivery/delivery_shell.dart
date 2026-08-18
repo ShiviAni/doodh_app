@@ -10,14 +10,18 @@ import '../../data/repositories/delivery_repository.dart';
 import '../auth/auth_service.dart';
 import 'cash_log_sheet.dart';
 import 'delivery_card.dart';
+import 'delivery_list_page.dart';
 import 'round_controller.dart';
 import 'sync_badge.dart';
+import 'voice/speech_service.dart';
+import 'voice/voice_entry_sheet.dart';
 
-/// The delivery person's entire app.
+/// The delivery person's entire app: a list of houses he taps as he goes.
 ///
-/// There is exactly one job here — walk the route and record each house — so
-/// there is no navigation, no menu and no dashboard. Anything that is not the
-/// current house is one tap away at most.
+/// He does not walk a fixed order in practice — he hands over the milk, then
+/// reaches for the phone — so the list is the home screen and any house is one
+/// tap away. The mic is the fast path: speaking "राम कुमार ढाई लीटर" fills the
+/// same entry without finding the row at all.
 class DeliveryShell extends StatefulWidget {
   const DeliveryShell({super.key, required this.session});
 
@@ -33,12 +37,73 @@ class _DeliveryShellState extends State<DeliveryShell> {
     recordedBy: widget.session.email,
   );
 
-  bool _seeded = false;
+  final _searchController = TextEditingController();
+  late final SpeechService _speech = sl<SpeechService>();
+
+  String _query = '';
+  bool _searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Warm the recogniser up front so the first tap on the mic starts
+    // listening immediately rather than after a visible pause.
+    _speech.initialise();
+  }
 
   @override
   void dispose() {
+    _searchController.dispose();
     _round.dispose();
     super.dispose();
+  }
+
+  /// Open one house's entry card.
+  Future<void> _openCustomer(Customer customer) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _EntrySheet(
+        customer: customer,
+        existing: _round.entryFor(customer.id),
+        dayKey: _round.dayKey,
+        recordedBy: widget.session.email,
+        speech: _speech,
+        onRecord: (qty, status) {
+          _round.recordFor(
+            customerId: customer.id,
+            qtyLitres: qty,
+            status: status,
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openVoice() async {
+    final result = await VoiceEntrySheet.show(
+      context,
+      customers: _round.customers,
+      speech: _speech,
+    );
+    if (result == null || !mounted) return;
+
+    _round.recordFor(
+      customerId: result.customer.id,
+      qtyLitres: result.qtyLitres,
+      status: result.status,
+    );
+
+    final s = S.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.confirm,
+        content: Text(
+          '${result.customer.displayName(hindi: s.lang == AppLanguage.hindi)}  ✓',
+          style: const TextStyle(color: Colors.white, fontSize: Sizes.bodyText),
+        ),
+      ),
+    );
   }
 
   @override
@@ -61,22 +126,70 @@ class _DeliveryShellState extends State<DeliveryShell> {
             _round.setCustomers(customers);
             _round.setRecorded(deliverySnap.data ?? const {});
 
-            // Resume where he left off, but only once — re-running this on
-            // every rebuild would yank the screen away mid-tap.
-            if (!_seeded && customers.isNotEmpty) {
-              _seeded = true;
-              WidgetsBinding.instance.addPostFrameCallback(
-                (_) => _round.jumpToFirstPending(),
-              );
-            }
-
             if (customers.isEmpty) return _EmptyState(strings: s);
 
             return AnimatedBuilder(
               animation: _round,
-              builder: (context, _) => _round.isComplete
-                  ? _DoneScreen(round: _round, session: widget.session)
-                  : _RoundScreen(round: _round, session: widget.session),
+              builder: (context, _) => Scaffold(
+                appBar: AppBar(
+                  toolbarHeight: 76,
+                  automaticallyImplyLeading: false,
+                  title: _searching
+                      ? TextField(
+                          controller: _searchController,
+                          autofocus: true,
+                          decoration: InputDecoration(
+                            hintText: s.lang == AppLanguage.hindi
+                                ? 'नाम या घर नं.'
+                                : 'Name or house no.',
+                            border: InputBorder.none,
+                          ),
+                          style: const TextStyle(fontSize: Sizes.bodyText),
+                          onChanged: (v) => setState(() => _query = v),
+                        )
+                      : _Progress(done: _round.doneCount, total: _round.total),
+                  actions: [
+                    IconButton(
+                      iconSize: 30,
+                      icon: Icon(_searching ? Icons.close : Icons.search),
+                      onPressed: () => setState(() {
+                        _searching = !_searching;
+                        if (!_searching) {
+                          _query = '';
+                          _searchController.clear();
+                        }
+                      }),
+                    ),
+                    if (!_searching) SyncBadge(dayKey: _round.dayKey),
+                  ],
+                ),
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      if (_round.isComplete) _CompleteBanner(strings: s),
+                      Expanded(
+                        child: DeliveryListPage(
+                          customers: _round.customers,
+                          recorded: _round.recorded,
+                          query: _query,
+                          onTapCustomer: _openCustomer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // The mic is the largest control on the screen because it is
+                // the fastest way to record without reading anything at all.
+                floatingActionButton: FloatingActionButton.large(
+                  backgroundColor: AppTheme.confirm,
+                  foregroundColor: Colors.white,
+                  onPressed: _openVoice,
+                  tooltip: s.lang == AppLanguage.hindi
+                      ? 'बोलकर भरें'
+                      : 'Record by voice',
+                  child: const Icon(Icons.mic, size: 44),
+                ),
+              ),
             );
           },
         );
@@ -85,68 +198,101 @@ class _DeliveryShellState extends State<DeliveryShell> {
   }
 }
 
-class _RoundScreen extends StatelessWidget {
-  const _RoundScreen({required this.round, required this.session});
+/// One house's entry, opened from the list.
+class _EntrySheet extends StatefulWidget {
+  const _EntrySheet({
+    required this.customer,
+    required this.existing,
+    required this.dayKey,
+    required this.recordedBy,
+    required this.speech,
+    required this.onRecord,
+  });
 
-  final RoundController round;
-  final Session session;
+  final Customer customer;
+  final Delivery? existing;
+  final String dayKey;
+  final String recordedBy;
+  final SpeechService speech;
+  final void Function(double qty, DeliveryStatus status) onRecord;
+
+  @override
+  State<_EntrySheet> createState() => _EntrySheetState();
+}
+
+class _EntrySheetState extends State<_EntrySheet> {
+  double? _voiceQty;
+
+  Future<void> _speakQuantity() async {
+    final result = await VoiceEntrySheet.show(
+      context,
+      customers: [widget.customer],
+      speech: widget.speech,
+      fixedCustomer: widget.customer,
+    );
+    if (result == null || !mounted) return;
+
+    widget.onRecord(result.qtyLitres, result.status);
+    if (mounted) Navigator.of(context).pop();
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
-    final customer = round.current;
-    if (customer == null) return const SizedBox.shrink();
 
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 76,
-        automaticallyImplyLeading: false,
-        title: _Progress(done: round.doneCount, total: round.total),
-        actions: [SyncBadge(dayKey: round.dayKey)],
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
-      body: SafeArea(
-        child: DeliveryCard(
-          customer: customer,
-          existing: round.entryFor(customer.id),
-          onRecord: (qty, status) =>
-              round.record(qtyLitres: qty, status: status),
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            Sizes.gapLarge,
-            0,
-            Sizes.gapLarge,
-            Sizes.gap,
-          ),
-          child: Row(
-            children: [
-              // Going back to fix the previous house is the single most likely
-              // recovery action, so it stays visible rather than hidden in a
-              // menu.
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.arrow_back),
-                  label: Text(s.back),
-                  onPressed: round.index > 0 ? round.previous : null,
-                ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: Sizes.gap),
+            DeliveryCard(
+              customer: widget.customer,
+              existing: widget.existing,
+              initialQty: _voiceQty,
+              onRecord: (qty, status) {
+                widget.onRecord(qty, status);
+                Navigator.of(context).pop();
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                Sizes.gapLarge,
+                0,
+                Sizes.gapLarge,
+                Sizes.gapLarge,
               ),
-              const SizedBox(width: Sizes.gap),
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.currency_rupee),
-                  label: Text(s.moneyReceived),
-                  onPressed: () => CashLogSheet.show(
-                    context,
-                    customer: customer,
-                    dayKey: round.dayKey,
-                    recordedBy: session.email,
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.mic, size: 28),
+                      label: Text(
+                        s.lang == AppLanguage.hindi ? 'बोलकर' : 'Speak',
+                      ),
+                      onPressed: _speakQuantity,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: Sizes.gap),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.currency_rupee),
+                      label: Text(s.moneyReceived),
+                      onPressed: () => CashLogSheet.show(
+                        context,
+                        customer: widget.customer,
+                        dayKey: widget.dayKey,
+                        recordedBy: widget.recordedBy,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -178,11 +324,14 @@ class _Progress extends StatelessWidget {
               ),
             ),
             const SizedBox(width: Sizes.gap),
-            Text(
-              s.housesLeft(total - done),
-              style: TextStyle(
-                fontSize: 15,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+            Flexible(
+              child: Text(
+                s.housesLeft(total - done),
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ],
@@ -201,116 +350,32 @@ class _Progress extends StatelessWidget {
   }
 }
 
-/// Shown once every house has an entry.
-class _DoneScreen extends StatelessWidget {
-  const _DoneScreen({required this.round, required this.session});
+class _CompleteBanner extends StatelessWidget {
+  const _CompleteBanner({required this.strings});
 
-  final RoundController round;
-  final Session session;
+  final S strings;
 
   @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final hindi = s.lang == AppLanguage.hindi;
-    final delivered = round.recorded.values.where((d) => d.isDelivered).length;
-    final skipped = round.recorded.values.where((d) => !d.isDelivered).length;
-
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(s.roundComplete),
-        actions: [SyncBadge(dayKey: round.dayKey)],
-      ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(Sizes.gapLarge),
-          children: [
-            const Icon(Icons.verified, size: 96, color: AppTheme.confirm),
-            const SizedBox(height: Sizes.gap),
-            Text(
-              s.housesDone(delivered),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: Sizes.titleText,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            if (skipped > 0)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '${s.housesSkipped}: $skipped',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: Sizes.bodyText),
-                ),
-              ),
-            const SizedBox(height: Sizes.gapLarge),
-            const Divider(),
-
-            // Every house stays reachable after the round so a mistake can be
-            // corrected without waiting for the owner.
-            for (final c in round.customers)
-              _DoneRow(
-                customer: c,
-                delivery: round.entryFor(c.id),
-                hindi: hindi,
-                onTap: () => round.jumpTo(c.id),
-              ),
-          ],
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    color: AppTheme.confirm.withValues(alpha: 0.12),
+    padding: const EdgeInsets.symmetric(horizontal: Sizes.gap, vertical: 12),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const Icon(Icons.verified, color: AppTheme.confirm, size: 30),
+        const SizedBox(width: 10),
+        Text(
+          strings.roundComplete,
+          style: const TextStyle(
+            fontSize: Sizes.bodyText,
+            fontWeight: FontWeight.w700,
+            color: AppTheme.confirm,
+          ),
         ),
-      ),
-    );
-  }
-}
-
-class _DoneRow extends StatelessWidget {
-  const _DoneRow({
-    required this.customer,
-    required this.delivery,
-    required this.hindi,
-    required this.onTap,
-  });
-
-  final Customer customer;
-  final Delivery? delivery;
-  final bool hindi;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final s = S.of(context);
-    final d = delivery;
-    final delivered = d?.isDelivered ?? false;
-
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 6),
-      leading: Icon(
-        delivered ? Icons.check_circle : Icons.cancel,
-        color: delivered ? AppTheme.confirm : AppTheme.decline,
-        size: 34,
-      ),
-      title: Text(
-        customer.displayName(hindi: hindi),
-        style: const TextStyle(
-          fontSize: Sizes.bodyText,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      trailing: Text(
-        delivered ? '${_litres(d!)} ${s.litre}' : s.notTaken,
-        style: const TextStyle(
-          fontSize: Sizes.bodyText,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      onTap: onTap,
-    );
-  }
-
-  String _litres(Delivery d) {
-    final v = d.qtyLitres.toStringAsFixed(1);
-    return v.endsWith('.0') ? v.substring(0, v.length - 2) : v;
-  }
+      ],
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {

@@ -33,7 +33,16 @@ dependencies:
   csv: ^6.0.0
   share_plus: ^11.0.0
   image_picker: ^1.2.0
+  speech_to_text: ^7.0.0
   cupertino_icons: ^1.0.8
+
+  # In-memory Firebase doubles. Used by test/ and by lib/main_demo.dart, which
+  # runs the whole UI on seeded sample data with no Firebase project. Declared
+  # as real dependencies only so the demo entrypoint may live under lib/; Dart
+  # tree-shakes from the entrypoint, so a release build of main.dart carries
+  # none of this.
+  fake_cloud_firestore: ^4.0.0
+  firebase_auth_mocks: ^0.15.0
 
 dev_dependencies:
   flutter_test:
@@ -41,8 +50,6 @@ dev_dependencies:
   flutter_lints: ^6.0.0
   bloc_test: ^10.0.0
   mocktail: ^1.0.5
-  fake_cloud_firestore: ^4.0.0
-  firebase_auth_mocks: ^0.15.0
 
 flutter:
   uses-material-design: true

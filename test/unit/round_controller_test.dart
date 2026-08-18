@@ -134,6 +134,75 @@ void main() {
     },
   );
 
+  test('recordFor records a house that is not the current one', () async {
+    // The delivery person taps the third house while the cursor is on the
+    // first. Recording must land on the house he tapped.
+    round.recordFor(
+      customerId: 'c3',
+      qtyLitres: 1.5,
+      status: DeliveryStatus.delivered,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    expect(round.entryFor('c3')?.qtyLitres, 1.5);
+    expect(round.entryFor('c1'), isNull);
+    // The cursor must not jump around under him.
+    expect(round.current?.id, 'c1');
+  });
+
+  test('recordFor ignores an unknown customer id', () {
+    // A voice match against a stale list must not create an orphan entry.
+    round.recordFor(
+      customerId: 'does-not-exist',
+      qtyLitres: 2,
+      status: DeliveryStatus.delivered,
+    );
+
+    expect(round.doneCount, 0);
+  });
+
+  test('recordFor writes under the deterministic id', () async {
+    round.recordFor(
+      customerId: 'c2',
+      qtyLitres: 3,
+      status: DeliveryStatus.delivered,
+    );
+    await Future<void>.delayed(Duration.zero);
+
+    final doc = await db
+        .collection('dairies/main/deliveries')
+        .doc('${dayKey}_c2')
+        .get();
+
+    expect(doc.exists, isTrue);
+    expect(doc.data()!['qtyLitres'], 3);
+  });
+
+  test(
+    'recordFor twice on one house overwrites rather than duplicates',
+    () async {
+      round.recordFor(
+        customerId: 'c1',
+        qtyLitres: 2,
+        status: DeliveryStatus.delivered,
+      );
+      round.recordFor(
+        customerId: 'c1',
+        qtyLitres: 2.5,
+        status: DeliveryStatus.delivered,
+      );
+      await Future<void>.delayed(Duration.zero);
+
+      final snap = await db
+          .collection('dairies/main/deliveries')
+          .where('customerId', isEqualTo: 'c1')
+          .get();
+
+      expect(snap.docs.length, 1);
+      expect(snap.docs.first.data()['qtyLitres'], 2.5);
+    },
+  );
+
   test('shrinking the customer list keeps the cursor in range', () {
     // The owner deactivating a house mid-round must not leave the index
     // pointing past the end of the list.
@@ -144,3 +213,9 @@ void main() {
     expect(round.current?.id, 'c1');
   });
 }
+
+// --- recordFor: the path used by the list and by voice entry ---------------
+//
+// Neither the list nor the microphone has a notion of a "current" house — he
+// taps or names whichever one he just served — so recording by id has to work
+// independently of where the cursor happens to sit.

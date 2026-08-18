@@ -7,9 +7,11 @@ project has to be created by you.
 
 ## The two roles
 
-**Delivery** — one screen, one job. A full-screen card per house in walking
-order, quantity pre-filled, one big green button to confirm. Works entirely
-offline; entries sync when signal returns. Sees no money at all.
+**Delivery** — a list of every house, tappable in any order. He hands over the
+milk, then taps that house and confirms; the quantity is pre-filled from the
+usual amount, so a normal house is one tap. A mic button records by voice
+instead — "राम कुमार ढाई लीटर" — with a confirmation step before saving. Works
+entirely offline; entries sync when signal returns. Sees no money at all.
 
 **Owner** — live Today view that updates the moment he taps save, a permanent
 change history, day/week/month/year reports in litres and rupees, customer
@@ -37,6 +39,19 @@ deterministic ID — `yyyy-MM-dd_customerId` — so a replayed write overwrites 
 document instead of creating a duplicate. The UI never awaits a write, because
 that future does not complete while offline.
 
+## Voice entry
+
+Hindi milk quantities are mostly irregular words rather than digits: डेढ़ is
+1.5 and ढाई is 2.5, and neither contains the word for one or two. A general
+number parser cannot reach them, so `voice/voice_parser.dart` carries an
+explicit table, matched longest-phrase-first — otherwise "साढ़े तीन" reads as
+"तीन" and quietly under-records by half a litre every time.
+
+Names are matched per-token against both spellings, because recognisers
+routinely return a first name only. A partial match is surfaced as "name
+uncertain" rather than saved silently: a wrong house is a wrong bill at the end
+of the month, so voice entry always ends in an explicit confirmation.
+
 ## Notifications and history
 
 Both are driven by Cloud Functions triggering on the Firestore write itself,
@@ -59,7 +74,8 @@ lib/
     repositories/  Firestore access + ReportCalculator (pure, fully unit-tested)
   features/
     auth/        email login, role resolution
-    delivery/    round controller, delivery card, stepper, sync badge, cash log
+    delivery/    house list, entry card, stepper, sync badge, cash log
+      voice/     speech service + Hindi/English quantity and name parser
     owner/       today, history, reports, customers, money, settings
     notifications/ FCM registration + foreground display
 functions/       Cloud Functions: change history + push (Node)
@@ -69,7 +85,7 @@ firestore.rules  the security boundary
 ## Commands
 
 ```bash
-flutter test                          # 50 tests
+flutter test                          # 90 tests
 flutter analyze                       # clean
 cd functions && node --test test_triggers.js   # 9 tests
 flutter run

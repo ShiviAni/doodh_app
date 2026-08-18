@@ -3,6 +3,8 @@
     <!-- Android 13+ requires this to be granted at runtime before any
          notification can be shown. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Voice entry: "राम कुमार ढाई लीटर". -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <application
         android:label="दूध हिसाब"
         android:name="${applicationName}"
@@ -49,6 +51,13 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+    <!-- Android 11+ package visibility: without this the speech recogniser
+         is invisible to the app and initialise() silently reports failure. -->
+    <queries>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 </manifest>

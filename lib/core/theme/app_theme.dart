@@ -53,7 +53,11 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          minimumSize: const Size.fromHeight(Sizes.tapTarget),
+          // Size(width, height), not Size.fromHeight — the latter sets an
+          // *infinite* minimum width, which lays out fine in a stretched
+          // Column but throws the moment a button sits inside a Row.
+          // Full-width is achieved by the parent stretching instead.
+          minimumSize: const Size(64, Sizes.tapTarget),
           textStyle: const TextStyle(
             fontSize: Sizes.bodyText + 4,
             fontWeight: FontWeight.w700,
@@ -65,7 +69,7 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(Sizes.tapTarget),
+          minimumSize: const Size(64, Sizes.tapTarget),
           textStyle: const TextStyle(
             fontSize: Sizes.bodyText + 2,
             fontWeight: FontWeight.w600,
