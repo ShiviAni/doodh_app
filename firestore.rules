@@ -1,0 +1,154 @@
+rules_version = '2';
+
+// Doodh Hisab — access model
+//
+// Two roles share one app. The delivery person records what he dropped at each
+// house; the owner sees the money. The separation is enforced *here*, on the
+// server, not by hiding buttons — a modified APK gets exactly the same answers.
+//
+// Key facts this file relies on:
+//   * Firestore grants access per DOCUMENT, never per FIELD. That is why no
+//     rupee value is ever stored on a customer or delivery document: reading
+//     the customer's name would otherwise expose their balance.
+//   * Firebase puts `email` in the auth token for email/password sign-in, so a
+//     member's role resolves with a single get() — no Cloud Function needed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /dairies/{dairyId} {
+
+      // ---- role helpers ----------------------------------------------------
+
+      function memberPath() {
+        return /databases/$(database)/documents/dairies/$(dairyId)/members/$(request.auth.token.email.lower());
+      }
+
+      function isMember() {
+        return request.auth != null
+            && request.auth.token.email != null
+            && exists(memberPath())
+            && get(memberPath()).data.active == true;
+      }
+
+      function role() {
+        return get(memberPath()).data.role;
+      }
+
+      function isOwner()    { return isMember() && role() == 'owner'; }
+      function isDelivery() { return isMember() && role() == 'delivery'; }
+
+      // ---- date helpers ----------------------------------------------------
+
+      // `request.time` is UTC, but the round happens around 5-7am IST — which
+      // is still the *previous* UTC date. Comparing a locally-computed dayKey
+      // against a UTC date would reject every early-morning entry, so shift to
+      // IST (UTC+5:30) before formatting.
+      function istNow() {
+        return request.time + duration.value(330, 'm');
+      }
+
+      function fmtDay(t) {
+        return string(t.year())
+          + '-' + (t.month() < 10 ? '0' : '') + string(t.month())
+          + '-' + (t.day()   < 10 ? '0' : '') + string(t.day());
+      }
+
+      // Today and yesterday are both accepted. Yesterday covers a round that
+      // runs across midnight, a phone whose clock has drifted, and an offline
+      // queue that only reaches the server the next morning — all of which are
+      // normal, while the window stays far too narrow to rewrite history.
+      function isRecentDay(dayKey) {
+        return dayKey == fmtDay(istNow())
+            || dayKey == fmtDay(istNow() - duration.value(1, 'd'));
+      }
+
+      // The dairy document itself: readable by members, writable by owner.
+      allow read: if isMember();
+      allow write: if isOwner();
+
+      // ---- members ---------------------------------------------------------
+      // Anyone signed in may read *their own* member doc — that read is how the
+      // app discovers its own role at startup. Everything else is owner-only.
+      match /members/{email} {
+        allow read: if request.auth != null
+                    && (email == request.auth.token.email.lower() || isOwner());
+        allow write: if isOwner();
+      }
+
+      // ---- customers -------------------------------------------------------
+      // The delivery person needs names, house numbers, photos and the usual
+      // quantity to do the round. None of that is financial.
+      match /customers/{customerId} {
+        allow read:  if isMember();
+        allow write: if isOwner();
+      }
+
+      // ---- deliveries ------------------------------------------------------
+      match /deliveries/{deliveryId} {
+        allow read: if isMember();
+
+        function body() { return request.resource.data; }
+
+        // Shape check applied to both roles, so a malformed or negative entry
+        // cannot reach the database from anywhere.
+        function validEntry() {
+          return body().qtyLitres is number
+              && body().qtyLitres >= 0
+              && body().qtyLitres <= 50
+              && body().status in ['delivered', 'skipped']
+              && body().dayKey is string
+              && body().customerId is string
+              // The document ID must match its contents, or the deterministic
+              // ID would stop preventing duplicates.
+              && deliveryId == body().dayKey + '_' + body().customerId
+              && exists(/databases/$(database)/documents/dairies/$(dairyId)/customers/$(body().customerId));
+        }
+
+        // Delivery role: recent dates only, own name attached, never a deletion,
+        // and never touching the owner's audit fields.
+        allow create, update: if isDelivery()
+                              && validEntry()
+                              && isRecentDay(body().dayKey)
+                              && body().recordedBy == request.auth.token.email.lower()
+                              && !body().keys().hasAny(['editedBy', 'editedAt', 'editReason']);
+
+        // Owner: any date, and may correct history.
+        allow create, update: if isOwner() && validEntry();
+
+        // Nobody deletes a delivery. Corrections overwrite in place so the
+        // edited* fields preserve the trail.
+        allow delete: if false;
+      }
+
+      // ---- payments --------------------------------------------------------
+      // The delivery person collects cash at the door, so he must be able to
+      // WRITE one. He must never READ this collection: the set of payments is
+      // enough to reconstruct who owes what.
+      match /payments/{paymentId} {
+        allow read: if isOwner();
+
+        allow create: if isDelivery()
+                      && request.resource.data.amount is number
+                      && request.resource.data.amount > 0
+                      && request.resource.data.amount <= 100000
+                      && request.resource.data.recordedBy == request.auth.token.email.lower()
+                      // Forced pending: an unverified doorstep claim cannot
+                      // reduce a real balance until the owner approves it.
+                      && request.resource.data.approved == false
+                      && !request.resource.data.keys().hasAny(['approvedBy', 'approvedAt']);
+
+        allow create, update, delete: if isOwner();
+      }
+
+      // ---- money: owner only, no exceptions ---------------------------------
+      // The ₹/litre rate lives here rather than on the dairy doc, so the
+      // delivery app cannot multiply litres into rupees even in principle.
+      match /settings/{docId}       { allow read, write: if isOwner(); }
+      match /balances/{customerId}  { allow read, write: if isOwner(); }
+      match /bills/{billId}         { allow read, write: if isOwner(); }
+      match /monthlyRollups/{month} { allow read, write: if isOwner(); }
+    }
+
+    // Anything not matched above is denied.
+  }
+}
