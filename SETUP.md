@@ -200,6 +200,18 @@ should never be able to clear a real due on its own.
 **Customers are deactivated, never deleted** — otherwise past months' bills would
 silently change.
 
+**Voice entry needs a speech recogniser on the phone.** Most Android phones have
+one through the Google app; emulators usually do not. If the mic says "कुछ
+सुनाई नहीं दिया" no matter what, that phone cannot do speech — the buttons still
+work exactly as before, so nothing is lost.
+
+**Voice may need internet unless you download the Hindi pack.** By default
+Android sends speech to Google's servers, which will not work mid-round with no
+signal. To make it work offline, on his phone go to **Settings → Google → All
+services → Search, Assistant & Voice → Voice → Offline speech recognition** and
+download **हिन्दी**. Worth doing before you hand the phone over — the rest of the
+app is fully offline, and this is the one part that is not by default.
+
 **The history is written on the server, not by the app.** Every entry in the
 History tab is created by a Cloud Function reacting to the database change
 itself. That is deliberate: a log the app keeps about its own behaviour is only

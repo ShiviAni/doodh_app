@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/l10n/strings.dart';
@@ -69,6 +71,16 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
   VoiceEntry? _entry;
   bool _listening = false;
   bool _unavailable = false;
+  bool _heardNothing = false;
+  Timer? _watchdog;
+
+  /// How long to wait for the first word before giving up.
+  ///
+  /// A device with no speech service reports itself as available and then
+  /// simply never returns a result, so without this the sheet sits on
+  /// "speak now" forever while he talks at it. Silence and a missing
+  /// recogniser look identical from here, so both end in the same advice.
+  static const _firstWordTimeout = Duration(seconds: 9);
 
   @override
   void initState() {
@@ -78,6 +90,7 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
 
   @override
   void dispose() {
+    _watchdog?.cancel();
     widget.speech.cancel();
     super.dispose();
   }
@@ -92,15 +105,35 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
 
     setState(() {
       _listening = true;
+      _heardNothing = false;
       _transcript = '';
       _entry = null;
+    });
+
+    _watchdog?.cancel();
+    _watchdog = Timer(_firstWordTimeout, () {
+      if (!mounted || _transcript.isNotEmpty) return;
+      widget.speech.cancel();
+      setState(() {
+        _listening = false;
+        _heardNothing = true;
+      });
     });
 
     final hindi = S.of(context).lang == AppLanguage.hindi;
     await widget.speech.listen(
       localeId: hindi ? 'hi_IN' : 'en_IN',
+      onError: (_) {
+        if (!mounted) return;
+        _watchdog?.cancel();
+        setState(() {
+          _listening = false;
+          _heardNothing = true;
+        });
+      },
       onResult: (text, isFinal) {
         if (!mounted) return;
+        if (text.isNotEmpty) _watchdog?.cancel();
         setState(() {
           _transcript = text;
           _entry = _interpret(text);
@@ -157,6 +190,8 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
         children: [
           if (_unavailable)
             _Unavailable(hindi: hindi)
+          else if (_heardNothing)
+            _HeardNothing(hindi: hindi)
           else ...[
             _MicIndicator(listening: _listening),
             const SizedBox(height: Sizes.gap),
@@ -374,6 +409,41 @@ class _Warning extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+/// Shown when nothing was heard within the timeout.
+///
+/// Names the three real causes in the order he can act on them, and points
+/// back at the buttons — which always work — rather than leaving him retrying
+/// a microphone that is never going to answer.
+class _HeardNothing extends StatelessWidget {
+  const _HeardNothing({required this.hindi});
+
+  final bool hindi;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      const Icon(Icons.mic_off, size: 64, color: AppTheme.pending),
+      const SizedBox(height: Sizes.gap),
+      Text(
+        hindi ? 'कुछ सुनाई नहीं दिया' : 'Nothing was heard',
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: Sizes.bodyText + 2,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        hindi
+            ? 'फिर से बोलकर देखिए।\nअगर फिर भी न चले तो नीचे बटन से भरिए — वो हमेशा चलता है।'
+            : 'Try speaking again.\nIf it still does not work, use the buttons — those always work.',
+        textAlign: TextAlign.center,
+        style: const TextStyle(fontSize: Sizes.bodyText - 3),
+      ),
+    ],
   );
 }
 

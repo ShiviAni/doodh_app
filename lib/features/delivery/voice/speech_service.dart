@@ -15,8 +15,14 @@ abstract class SpeechService {
   bool get isListening;
 
   /// [onResult] fires repeatedly with partial text, then a final result.
+  ///
+  /// [onError] reports a recogniser failure. It matters because
+  /// `initialize()` returning true does not guarantee a working recogniser —
+  /// a device with no speech service still reports available, then simply
+  /// never produces a result.
   Future<void> listen({
     required void Function(String transcript, bool isFinal) onResult,
+    void Function(String message)? onError,
     String localeId,
   });
 
@@ -27,6 +33,7 @@ abstract class SpeechService {
 class DeviceSpeechService implements SpeechService {
   final SpeechToText _speech = SpeechToText();
   bool _available = false;
+  void Function(String message)? _onError;
 
   @override
   bool get isAvailable => _available;
@@ -38,7 +45,10 @@ class DeviceSpeechService implements SpeechService {
   Future<bool> initialise() async {
     try {
       _available = await _speech.initialize(
-        onError: (e) => debugPrint('speech error: ${e.errorMsg}'),
+        onError: (e) {
+          debugPrint('speech error: ${e.errorMsg}');
+          _onError?.call(e.errorMsg);
+        },
         onStatus: (s) => debugPrint('speech status: $s'),
       );
     } catch (e) {
@@ -51,9 +61,14 @@ class DeviceSpeechService implements SpeechService {
   @override
   Future<void> listen({
     required void Function(String transcript, bool isFinal) onResult,
+    void Function(String message)? onError,
     String localeId = 'hi_IN',
   }) async {
-    if (!_available) return;
+    if (!_available) {
+      onError?.call('unavailable');
+      return;
+    }
+    _onError = onError;
     await _speech.listen(
       onResult: (r) => onResult(r.recognizedWords, r.finalResult),
       listenOptions: SpeechListenOptions(
