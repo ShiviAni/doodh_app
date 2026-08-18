@@ -140,6 +140,23 @@ service cloud.firestore {
         allow create, update, delete: if isOwner();
       }
 
+      // ---- change history ---------------------------------------------------
+      // Owner reads it; nobody writes it from a client. Entries are created by
+      // Cloud Functions using admin credentials, which bypass these rules
+      // entirely — that is what makes the history trustworthy. If the app could
+      // write here, a modified app could also decline to.
+      match /activity/{entryId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+
+      // ---- push tokens ------------------------------------------------------
+      // The owner's app registers its device here so the notification function
+      // knows where to send. Delivery devices never appear in this collection.
+      match /ownerTokens/{token} {
+        allow read, write: if isOwner();
+      }
+
       // ---- money: owner only, no exceptions ---------------------------------
       // The ₹/litre rate lives here rather than on the dairy doc, so the
       // delivery app cannot multiply litres into rupees even in principle.

@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Android 13+ requires this to be granted at runtime before any
+         notification can be shown. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="दूध हिसाब"
         android:name="${applicationName}"
@@ -31,6 +34,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Must match the channel the Cloud Function sends on, or Android
+             files notifications under a silent default channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="doodh_updates" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

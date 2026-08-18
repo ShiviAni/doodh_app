@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get_it/get_it.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../data/repositories/activity_repository.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/dairy_refs.dart';
 import '../../data/repositories/delivery_repository.dart';
@@ -11,6 +12,7 @@ import '../../data/repositories/payment_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../../features/auth/auth_service.dart';
+import '../../features/notifications/push_service.dart';
 import '../l10n/strings.dart';
 
 final sl = GetIt.instance;
@@ -44,7 +46,9 @@ Future<void> setupInjector({
   sl.registerSingleton<PaymentRepository>(PaymentRepository(refs));
   sl.registerSingleton<SettingsRepository>(SettingsRepository(refs));
   sl.registerSingleton<MemberRepository>(MemberRepository(refs));
+  sl.registerSingleton<ActivityRepository>(ActivityRepository(refs));
   sl.registerSingleton<ReportCalculator>(const ReportCalculator());
+  sl.registerSingleton<PushService>(PushService(refs));
   sl.registerSingleton<AuthService>(
     AuthService(auth ?? FirebaseAuth.instance, sl<MemberRepository>()),
   );

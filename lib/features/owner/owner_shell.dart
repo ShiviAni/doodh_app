@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../auth/auth_service.dart';
+import '../notifications/push_service.dart';
 import 'customers_page.dart';
+import 'history_page.dart';
 import 'money_page.dart';
 import 'reports_page.dart';
 import 'settings_page.dart';
@@ -26,10 +29,19 @@ class _OwnerShellState extends State<OwnerShell> {
   int _tab = 0;
 
   @override
+  void initState() {
+    super.initState();
+    // Owner devices only. Registering a delivery phone here would put it in the
+    // owner-token list and send it notifications about its own work.
+    sl<PushService>().startForOwner();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final pages = [
       const TodayPage(),
+      const HistoryPage(),
       const ReportsPage(),
       const CustomersPage(),
       MoneyPage(session: widget.session),

@@ -9,17 +9,20 @@ Budget about 30 minutes, once.
 
 ## What this costs
 
-**₹0 per month**, permanently, at 50 houses. The design stays on Firebase's free
-Spark plan and needs no credit card:
+**About ₹0 per month** at 50 houses — but this now needs the **Blaze plan with a
+card on file**, because push notifications require Cloud Functions.
 
-| | Your daily usage | Free limit | Headroom |
+You stay far inside the free allowances that Blaze keeps:
+
+| | Your monthly usage | Free allowance | Headroom |
 |---|---|---|---|
-| Writes | ~50 | 20,000 | 400× |
-| Reads | ~2,000 | 50,000 | 25× |
+| Function calls | ~1,600 | 2,000,000 | 1,250× |
+| Firestore writes | ~1,600 | 600,000 | 375× |
+| Firestore reads | ~60,000 | 1,500,000 | 25× |
 | Storage | ~4 MB/year | 1 GB | 250× |
 
-Two things were deliberately avoided to keep it there: **Cloud Functions** and
-**Phone/SMS login** — each of those forces the paid Blaze plan.
+**Set a spend cap in Step 2b so this can never surprise you.** Login stays on
+email/password rather than SMS, which would be a genuine per-message cost.
 
 ---
 
@@ -53,6 +56,18 @@ Then go to <https://console.firebase.google.com> and:
    Leave "Email link" off.
 4. **Build → Storage** → Get started (only needed if you want house photos).
 
+### Step 2b — Upgrade to Blaze, then cap the spend
+
+Cloud Functions are what send your notifications, and they need Blaze.
+
+1. Bottom-left of the console → **Upgrade** → Blaze → add a card.
+2. **Immediately set a budget cap** so a mistake cannot cost you money:
+   Google Cloud Console → **Billing → Budgets & alerts → Create budget** →
+   amount **₹100/month**, alert at 50% / 90% / 100%.
+
+At your volume the real bill should be ₹0 every month. The cap is there so that
+stays true even if something goes wrong.
+
 ## Step 3 — Connect the app
 
 From `~/AndroidStudioProjects/doodh_app`:
@@ -70,8 +85,22 @@ Pick the `doodh-hisab` project and select **android** and **ios**. This overwrit
 money. Until they are uploaded, your database is wide open.
 
 ```bash
-firebase deploy --only firestore:rules,storage
+firebase deploy --only firestore:rules,firestore:indexes,storage
 ```
+
+## Step 4b — Deploy the notification functions
+
+This is what buzzes your phone when he saves, and what writes the permanent
+change history.
+
+```bash
+cd functions && npm install && cd ..
+firebase deploy --only functions
+```
+
+The first deploy takes a few minutes and may ask you to enable some Google Cloud
+APIs — say yes. Three functions should appear: `onDeliveryWritten`,
+`onPaymentWritten`, `onCustomerWritten`.
 
 ## Step 5 — Create the two accounts
 
@@ -141,7 +170,12 @@ Worth doing before you rely on it:
    and confirm all 50 appear on your dashboard with no duplicates.
 2. **Live sync** — with both phones open, have him mark one house. Your Today
    total should move within a second or two.
-3. **Money isolation** — log into the delivery app and confirm there is no screen
+3. **Push** — lock your phone, close the app completely, then have him record a
+   house. Your phone should buzz within a few seconds.
+4. **Change alert** — open **History**, change a past entry from your own app,
+   and confirm the new row reads "changed from X to Y" with your name and the
+   reason on it.
+5. **Money isolation** — log into the delivery app and confirm there is no screen
    anywhere showing a rate, a total, or a due.
 
 ---
@@ -165,3 +199,16 @@ should never be able to clear a real due on its own.
 
 **Customers are deactivated, never deleted** — otherwise past months' bills would
 silently change.
+
+**The history is written on the server, not by the app.** Every entry in the
+History tab is created by a Cloud Function reacting to the database change
+itself. That is deliberate: a log the app keeps about its own behaviour is only
+as honest as the app. This one records what actually reached the database.
+
+**You will not be notified twice for one delivery.** His phone re-sends queued
+entries when signal returns, sometimes more than once. The function compares the
+old and new values and stays quiet when nothing actually changed.
+
+**No notification arriving?** Check, in order: notification permission is granted
+on your phone; you are logged in as the owner (delivery devices are never
+registered); and `firebase functions:log` shows the trigger firing.

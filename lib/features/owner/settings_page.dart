@@ -8,6 +8,7 @@ import '../../data/models/member.dart';
 import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../auth/auth_service.dart';
+import '../notifications/push_service.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, required this.session});
@@ -49,7 +50,12 @@ class SettingsPage extends StatelessWidget {
         OutlinedButton.icon(
           icon: const Icon(Icons.logout),
           label: Text(s.logout),
-          onPressed: () => sl<AuthService>().signOut(),
+          onPressed: () async {
+            // Drop this device from the token list first — otherwise it keeps
+            // receiving notifications for a dairy it is no longer signed in to.
+            await sl<PushService>().unregister();
+            await sl<AuthService>().signOut();
+          },
         ),
       ],
     );

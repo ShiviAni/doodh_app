@@ -31,4 +31,14 @@ class DairyRefs {
       dairy.collection('payments');
   CollectionReference<Map<String, dynamic>> get monthlyRollups =>
       dairy.collection('monthlyRollups');
+
+  /// Permanent change history. Written only by Cloud Functions running with
+  /// admin credentials — no client, owner included, may write here.
+  CollectionReference<Map<String, dynamic>> get activity =>
+      dairy.collection('activity');
+
+  /// Device push tokens for the owner. Written by the owner's app on launch,
+  /// read by the Cloud Function that sends notifications.
+  CollectionReference<Map<String, dynamic>> get ownerTokens =>
+      dairy.collection('ownerTokens');
 }

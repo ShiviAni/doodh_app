@@ -79,6 +79,7 @@ class S {
 
   // --- owner ---
   String get tabToday => _p('आज', 'Today');
+  String get tabHistory => _p('बदलाव', 'History');
   String get tabReports => _p('रिपोर्ट', 'Reports');
   String get tabCustomers => _p('ग्राहक', 'Customers');
   String get tabMoney => _p('पैसा', 'Money');
