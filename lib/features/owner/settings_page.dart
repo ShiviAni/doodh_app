@@ -33,6 +33,7 @@ class SettingsPage extends StatelessWidget {
             ButtonSegment(value: AppLanguage.english, label: Text('English')),
           ],
           selected: {s.lang},
+          showSelectedIcon: false,
           onSelectionChanged: (sel) => LanguageScope.set(context, sel.first),
         ),
 
@@ -298,6 +299,7 @@ class _MemberEditorState extends State<_MemberEditor> {
               ),
             ],
             selected: {_role},
+            showSelectedIcon: false,
             onSelectionChanged: (sel) => setState(() => _role = sel.first),
           ),
           const SizedBox(height: Sizes.gapLarge),

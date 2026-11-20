@@ -101,11 +101,16 @@ class _MoneyPageState extends State<MoneyPage> {
                                 ),
                               ),
                             ),
-                            Text(
-                              Fmt.monthLabel(_month),
-                              style: const TextStyle(
-                                fontSize: Sizes.bodyText,
-                                fontWeight: FontWeight.w700,
+                            Expanded(
+                              child: Text(
+                                Fmt.monthLabel(_month),
+                                textAlign: TextAlign.center,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: Sizes.bodyText,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                             IconButton.filledTonal(
@@ -121,34 +126,37 @@ class _MoneyPageState extends State<MoneyPage> {
                         ),
                         const SizedBox(height: Sizes.gap),
 
-                        Row(
-                          children: [
-                            Expanded(
-                              child: StatTile(
-                                label: hindi ? 'कुल बिल' : 'Billed',
-                                value: Fmt.money(billed),
-                                icon: Icons.receipt_long_outlined,
+                        IntrinsicHeight(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Expanded(
+                                child: StatTile(
+                                  label: hindi ? 'कुल बिल' : 'Billed',
+                                  value: Fmt.money(billed),
+                                  icon: Icons.receipt_long_outlined,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: Sizes.gap),
-                            Expanded(
-                              child: StatTile(
-                                label: hindi ? 'जमा हुआ' : 'Collected',
-                                value: Fmt.money(collected),
-                                icon: Icons.savings_outlined,
-                                color: AppTheme.confirm,
+                              const SizedBox(width: Sizes.gap),
+                              Expanded(
+                                child: StatTile(
+                                  label: hindi ? 'जमा हुआ' : 'Collected',
+                                  value: Fmt.money(collected),
+                                  icon: Icons.savings_outlined,
+                                  color: AppTheme.confirm,
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: Sizes.gap),
-                            Expanded(
-                              child: StatTile(
-                                label: s.balance,
-                                value: Fmt.money(billed - collected),
-                                icon: Icons.pending_actions_outlined,
-                                color: AppTheme.decline,
+                              const SizedBox(width: Sizes.gap),
+                              Expanded(
+                                child: StatTile(
+                                  label: s.balance,
+                                  value: Fmt.money(billed - collected),
+                                  icon: Icons.pending_actions_outlined,
+                                  color: AppTheme.decline,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
 
                         if (pending.isNotEmpty) ...[
@@ -523,6 +531,7 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
               ButtonSegment(value: PaymentMethod.other, label: Text('Other')),
             ],
             selected: {_method},
+            showSelectedIcon: false,
             onSelectionChanged: (sel) => setState(() => _method = sel.first),
           ),
           const SizedBox(height: Sizes.gapLarge),

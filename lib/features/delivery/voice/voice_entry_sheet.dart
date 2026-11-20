@@ -328,16 +328,10 @@ class _Understood extends StatelessWidget {
     if (e == null || e.transcript.isEmpty) return const SizedBox.shrink();
 
     if (!e.hasCustomer) {
-      return _Warning(
-        text: hindi
-            ? 'घर समझ नहीं आया — नाम दोबारा बोलिए'
-            : 'Could not tell which house — say the name again',
-      );
+      return _Warning(text: s.voiceHouseUnclear);
     }
     if (e.qtyLitres == null && !e.skipped) {
-      return _Warning(
-        text: hindi ? 'कितना दूध? दोबारा बोलिए' : 'How much milk? Say it again',
-      );
+      return _Warning(text: s.voiceQtyUnclear);
     }
 
     final name = e.customer!.displayName(hindi: hindi);
@@ -377,9 +371,7 @@ class _Understood extends StatelessWidget {
           if (e.nameConfidence < 0.99) ...[
             const SizedBox(height: 6),
             Text(
-              hindi
-                  ? 'नाम पक्का नहीं — देख लीजिए'
-                  : 'Name uncertain — check it',
+              s.voiceNameUncertain,
               textAlign: TextAlign.center,
               style: const TextStyle(
                 fontSize: 13,

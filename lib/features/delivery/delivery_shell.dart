@@ -139,9 +139,7 @@ class _DeliveryShellState extends State<DeliveryShell> {
                           controller: _searchController,
                           autofocus: true,
                           decoration: InputDecoration(
-                            hintText: s.lang == AppLanguage.hindi
-                                ? 'नाम या घर नं.'
-                                : 'Name or house no.',
+                            hintText: s.searchHint,
                             border: InputBorder.none,
                           ),
                           style: const TextStyle(fontSize: Sizes.bodyText),

@@ -34,23 +34,30 @@ class StatTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              if (icon != null) ...[
-                Icon(icon, size: 20, color: tone),
-                const SizedBox(width: 6),
-              ],
-              Flexible(
-                child: Text(
+          // Icon + label scale down together instead of wrapping mid-word
+          // when the tile is narrow (e.g. three tiles in a row).
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (icon != null) ...[
+                  Icon(icon, size: 20, color: tone),
+                  const SizedBox(width: 6),
+                ],
+                Text(
                   label,
+                  maxLines: 1,
+                  softWrap: false,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 6),
           FittedBox(
@@ -58,6 +65,8 @@ class StatTile extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
+              maxLines: 1,
+              softWrap: false,
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.w800,

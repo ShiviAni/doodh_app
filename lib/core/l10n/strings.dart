@@ -52,6 +52,15 @@ class S {
   String get notTaken => _p('आज नहीं लिया', 'Not taken today');
   String get houseNo => _p('घर नं.', 'House no.');
   String get usualQty => _p('रोज़ का', 'Usual');
+  String get searchHint => _p('नाम या घर नं.', 'Name or house no.');
+  String get voiceHouseUnclear => _p(
+    'घर समझ नहीं आया — नाम दोबारा बोलिए',
+    'Could not tell which house — say the name again',
+  );
+  String get voiceQtyUnclear =>
+      _p('कितना दूध? दोबारा बोलिए', 'How much milk? Say it again');
+  String get voiceNameUncertain =>
+      _p('नाम पक्का नहीं — देख लीजिए', 'Name uncertain — check it');
   String get roundComplete =>
       _p('आज का काम पूरा हुआ', "Today's round is complete");
   String get moneyReceived => _p('पैसे मिले', 'Money received');
@@ -97,6 +106,7 @@ class S {
   String get year => _p('साल', 'Year');
 
   String get customerName => _p('ग्राहक का नाम', 'Customer name');
+  String get customerNameHindi => _p('नाम (हिन्दी)', 'Name (Hindi)');
   String get phone => _p('फोन नंबर', 'Phone number');
   String get defaultQty => _p('रोज़ का दूध', 'Usual daily milk');
   String get routeOrder => _p('रास्ते में क्रम', 'Order on route');

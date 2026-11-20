@@ -180,7 +180,7 @@ class _CustomerEditorState extends State<_CustomerEditor> {
             const SizedBox(height: Sizes.gap),
             TextField(
               controller: _nameHi,
-              decoration: const InputDecoration(labelText: 'नाम (हिन्दी)'),
+              decoration: InputDecoration(labelText: s.customerNameHindi),
             ),
             const SizedBox(height: Sizes.gap),
             Row(

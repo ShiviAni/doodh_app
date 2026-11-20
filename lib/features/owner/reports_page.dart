@@ -161,6 +161,7 @@ class _ReportsPageState extends State<ReportsPage> {
                         ),
                       ],
                       selected: {_period},
+                      showSelectedIcon: false,
                       onSelectionChanged: (sel) =>
                           setState(() => _period = sel.first),
                     ),
@@ -173,11 +174,16 @@ class _ReportsPageState extends State<ReportsPage> {
                           icon: const Icon(Icons.chevron_left),
                           onPressed: () => _shift(-1),
                         ),
-                        Text(
-                          _rangeLabel,
-                          style: const TextStyle(
-                            fontSize: Sizes.bodyText,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            _rangeLabel,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: Sizes.bodyText,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         IconButton.filledTonal(
