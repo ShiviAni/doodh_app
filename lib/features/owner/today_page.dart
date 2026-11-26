@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
@@ -8,8 +9,9 @@ import '../../data/models/customer.dart';
 import '../../data/models/delivery.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/delivery_repository.dart';
-import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/settings_repository.dart';
+import '../auth/auth_service.dart';
+import 'bloc/today_cubit.dart';
 import 'edit_entry_sheet.dart';
 import 'stat_tile.dart';
 
@@ -19,121 +21,121 @@ import 'stat_tile.dart';
 /// moment the delivery person taps a house — or the moment his phone regains
 /// signal, if he was working offline.
 class TodayPage extends StatelessWidget {
-  const TodayPage({super.key});
+  const TodayPage({super.key, required this.session});
+
+  final Session session;
+
+  @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => TodayCubit(
+      settings: sl<SettingsRepository>(),
+      customers: sl<CustomerRepository>(),
+      deliveries: sl<DeliveryRepository>(),
+      editorEmail: session.email,
+    ),
+    child: const _TodayView(),
+  );
+}
+
+class _TodayView extends StatelessWidget {
+  const _TodayView();
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final hindi = s.lang == AppLanguage.hindi;
-    final today = DateTime.now();
-    final dayKey = DateKeys.day(today);
 
-    return StreamBuilder<double>(
-      stream: sl<SettingsRepository>().watchRate(),
-      builder: (context, rateSnap) {
-        final rate = rateSnap.data ?? SettingsRepository.defaultRate;
+    return BlocBuilder<TodayCubit, TodayState>(
+      builder: (context, state) {
+        final today = state.day;
+        final dayKey = state.dayKey;
+        final rate = state.rate;
+        final customers = state.customers;
+        final recorded = state.recorded;
+        final summary = state.summary;
 
-        return StreamBuilder<List<Customer>>(
-          stream: sl<CustomerRepository>().watchActive(),
-          builder: (context, custSnap) {
-            final customers = custSnap.data ?? const <Customer>[];
+        return ListView(
+          padding: const EdgeInsets.all(Sizes.gap),
+          children: [
+            Text(
+              '${s.today} — ${Fmt.dayLabel(today)}',
+              style: const TextStyle(
+                fontSize: Sizes.bodyText + 2,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: Sizes.gap),
 
-            return StreamBuilder<Map<String, Delivery>>(
-              stream: sl<DeliveryRepository>().watchDay(dayKey),
-              builder: (context, delSnap) {
-                final recorded = delSnap.data ?? const <String, Delivery>{};
-                final summary = const ReportCalculator().summarise(
-                  deliveries: recorded.values.toList(),
-                  ratePerLitre: rate,
-                  activeCustomerCount: customers.length,
-                );
+            Row(
+              children: [
+                Expanded(
+                  child: StatTile(
+                    label: s.totalLitres,
+                    value: '${Fmt.litres(summary.litres)} ${s.litre}',
+                    icon: Icons.water_drop_outlined,
+                  ),
+                ),
+                const SizedBox(width: Sizes.gap),
+                Expanded(
+                  child: StatTile(
+                    label: s.totalAmount,
+                    value: Fmt.money(summary.amount),
+                    icon: Icons.currency_rupee,
+                    color: AppTheme.confirm,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Sizes.gap),
 
-                return ListView(
-                  padding: const EdgeInsets.all(Sizes.gap),
-                  children: [
-                    Text(
-                      '${s.today} — ${Fmt.dayLabel(today)}',
-                      style: const TextStyle(
-                        fontSize: Sizes.bodyText + 2,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: Sizes.gap),
+            Row(
+              children: [
+                Expanded(
+                  child: StatTile(
+                    label: s.housesServed,
+                    value: '${summary.deliveredCount}',
+                    icon: Icons.check_circle_outline,
+                    color: AppTheme.confirm,
+                  ),
+                ),
+                const SizedBox(width: Sizes.gap),
+                Expanded(
+                  child: StatTile(
+                    label: s.housesSkipped,
+                    value: '${summary.skippedCount}',
+                    icon: Icons.cancel_outlined,
+                    color: AppTheme.decline,
+                  ),
+                ),
+                const SizedBox(width: Sizes.gap),
+                Expanded(
+                  child: StatTile(
+                    label: s.housesPending,
+                    value: '${summary.pendingCount}',
+                    icon: Icons.hourglass_empty,
+                    color: AppTheme.pending,
+                  ),
+                ),
+              ],
+            ),
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: StatTile(
-                            label: s.totalLitres,
-                            value: '${Fmt.litres(summary.litres)} ${s.litre}',
-                            icon: Icons.water_drop_outlined,
-                          ),
-                        ),
-                        const SizedBox(width: Sizes.gap),
-                        Expanded(
-                          child: StatTile(
-                            label: s.totalAmount,
-                            value: Fmt.money(summary.amount),
-                            icon: Icons.currency_rupee,
-                            color: AppTheme.confirm,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: Sizes.gap),
+            if (summary.pendingCount > 0) ...[
+              const SizedBox(height: Sizes.gap),
+              _PendingBanner(count: summary.pendingCount, hindi: hindi),
+            ],
 
-                    Row(
-                      children: [
-                        Expanded(
-                          child: StatTile(
-                            label: s.housesServed,
-                            value: '${summary.deliveredCount}',
-                            icon: Icons.check_circle_outline,
-                            color: AppTheme.confirm,
-                          ),
-                        ),
-                        const SizedBox(width: Sizes.gap),
-                        Expanded(
-                          child: StatTile(
-                            label: s.housesSkipped,
-                            value: '${summary.skippedCount}',
-                            icon: Icons.cancel_outlined,
-                            color: AppTheme.decline,
-                          ),
-                        ),
-                        const SizedBox(width: Sizes.gap),
-                        Expanded(
-                          child: StatTile(
-                            label: s.housesPending,
-                            value: '${summary.pendingCount}',
-                            icon: Icons.hourglass_empty,
-                            color: AppTheme.pending,
-                          ),
-                        ),
-                      ],
-                    ),
+            const SizedBox(height: Sizes.gapLarge),
+            const Divider(),
 
-                    if (summary.pendingCount > 0) ...[
-                      const SizedBox(height: Sizes.gap),
-                      _PendingBanner(count: summary.pendingCount, hindi: hindi),
-                    ],
-
-                    const SizedBox(height: Sizes.gapLarge),
-                    const Divider(),
-
-                    for (final c in customers)
-                      _CustomerRow(
-                        customer: c,
-                        delivery: recorded[c.id],
-                        rate: rate,
-                        hindi: hindi,
-                        dayKey: dayKey,
-                      ),
-                  ],
-                );
-              },
-            );
-          },
+            for (final c in customers)
+              _CustomerRow(
+                customer: c,
+                delivery: recorded[c.id],
+                rate: rate,
+                hindi: hindi,
+                dayKey: dayKey,
+              ),
+          ],
         );
       },
     );

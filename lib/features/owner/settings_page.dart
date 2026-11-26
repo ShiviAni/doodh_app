@@ -1,18 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
+import '../../core/utils/validators.dart';
 import '../../data/models/member.dart';
 import '../../data/repositories/member_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../auth/auth_service.dart';
 import '../notifications/push_service.dart';
+import 'bloc/settings_cubit.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key, required this.session});
+
+  final Session session;
+
+  @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => SettingsCubit(
+      settings: sl<SettingsRepository>(),
+      members: sl<MemberRepository>(),
+      push: sl<PushService>(),
+      auth: sl<AuthService>(),
+    ),
+    child: _SettingsView(session: session),
+  );
+}
+
+class _SettingsView extends StatelessWidget {
+  const _SettingsView({required this.session});
 
   final Session session;
 
@@ -52,12 +71,7 @@ class SettingsPage extends StatelessWidget {
         OutlinedButton.icon(
           icon: const Icon(Icons.logout),
           label: Text(s.logout),
-          onPressed: () async {
-            // Drop this device from the token list first — otherwise it keeps
-            // receiving notifications for a dairy it is no longer signed in to.
-            await sl<PushService>().unregister();
-            await sl<AuthService>().signOut();
-          },
+          onPressed: context.read<SettingsCubit>().signOut,
         ),
       ],
     );
@@ -96,9 +110,10 @@ class _RateEditor extends StatefulWidget {
   State<_RateEditor> createState() => _RateEditorState();
 }
 
+/// Holds only the text controller; the rate itself comes from
+/// [SettingsCubit].
 class _RateEditorState extends State<_RateEditor> {
   final _controller = TextEditingController();
-  bool _loaded = false;
 
   @override
   void dispose() {
@@ -111,14 +126,16 @@ class _RateEditorState extends State<_RateEditor> {
     final s = S.of(context);
     final hindi = s.lang == AppLanguage.hindi;
 
-    return StreamBuilder<double>(
-      stream: sl<SettingsRepository>().watchRate(),
-      builder: (context, snap) {
-        final rate = snap.data ?? SettingsRepository.defaultRate;
-        if (!_loaded && snap.hasData) {
-          _loaded = true;
-          _controller.text = rate.toStringAsFixed(0);
-        }
+    final cubit = context.read<SettingsCubit>();
+
+    // Prefill once, when the stored rate first arrives. Later updates must
+    // not overwrite what the owner is in the middle of typing.
+    return BlocConsumer<SettingsCubit, SettingsState>(
+      listenWhen: (prev, next) => !prev.rateLoaded && next.rateLoaded,
+      listener: (_, state) => _controller.text = state.rate.toStringAsFixed(0),
+      buildWhen: (prev, next) => prev.rate != next.rate,
+      builder: (context, state) {
+        final rate = state.rate;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -139,11 +156,8 @@ class _RateEditorState extends State<_RateEditor> {
                 const SizedBox(width: Sizes.gap),
                 FilledButton(
                   onPressed: () {
-                    final v = double.tryParse(_controller.text.trim());
-                    if (v != null && v > 0) {
-                      fireAndForget(sl<SettingsRepository>().setRate(v));
-                      FocusScope.of(context).unfocus();
-                    }
+                    cubit.setRate(_controller.text);
+                    FocusScope.of(context).unfocus();
                   },
                   child: Text(s.save),
                 ),
@@ -178,10 +192,10 @@ class _MembersList extends StatelessWidget {
     final s = S.of(context);
     final hindi = s.lang == AppLanguage.hindi;
 
-    return StreamBuilder<List<Member>>(
-      stream: sl<MemberRepository>().watchAll(),
-      builder: (context, snap) {
-        final members = snap.data ?? const <Member>[];
+    return BlocBuilder<SettingsCubit, SettingsState>(
+      buildWhen: (prev, next) => prev.members != next.members,
+      builder: (context, state) {
+        final members = state.members;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -219,11 +233,16 @@ class _MembersList extends StatelessWidget {
 class _MemberEditor extends StatefulWidget {
   const _MemberEditor();
 
-  static Future<void> show(BuildContext context) => showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => const _MemberEditor(),
-  );
+  static Future<void> show(BuildContext context) {
+    // A new route, outside the page's provider: hand the cubit across.
+    final cubit = context.read<SettingsCubit>();
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) =>
+          BlocProvider.value(value: cubit, child: const _MemberEditor()),
+    );
+  }
 
   @override
   State<_MemberEditor> createState() => _MemberEditorState();
@@ -308,18 +327,11 @@ class _MemberEditorState extends State<_MemberEditor> {
             icon: const Icon(Icons.check),
             label: Text(s.save),
             onPressed: () {
-              final email = _email.text.trim().toLowerCase();
-              if (!email.contains('@')) return;
-              fireAndForget(
-                sl<MemberRepository>().upsert(
-                  Member(
-                    email: email,
-                    role: _role,
-                    displayName: _name.text.trim().isEmpty
-                        ? email
-                        : _name.text.trim(),
-                  ),
-                ),
+              if (!Validators.isPlausibleEmail(_email.text)) return;
+              context.read<SettingsCubit>().addMember(
+                email: _email.text,
+                name: _name.text,
+                role: _role,
               );
               Navigator.of(context).pop();
             },

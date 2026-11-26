@@ -41,7 +41,7 @@ class _OwnerShellState extends State<OwnerShell> {
   Widget build(BuildContext context) {
     final s = S.of(context);
     final pages = [
-      const TodayPage(),
+      TodayPage(session: widget.session),
       const HistoryPage(),
       const ReportsPage(),
       const CustomersPage(),

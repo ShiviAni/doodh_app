@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/di/injector.dart';
@@ -7,6 +8,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/activity.dart';
 import '../../data/repositories/activity_repository.dart';
+import 'bloc/history_cubit.dart';
 
 /// The permanent record of everything that happened to the data.
 ///
@@ -18,19 +20,27 @@ class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
 
   @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => HistoryCubit(activity: sl<ActivityRepository>()),
+    child: const _HistoryView(),
+  );
+}
+
+class _HistoryView extends StatelessWidget {
+  const _HistoryView();
+
+  @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final hindi = s.lang == AppLanguage.hindi;
 
-    return StreamBuilder<List<Activity>>(
-      stream: sl<ActivityRepository>().watchRecent(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting && !snap.hasData) {
+    return BlocBuilder<HistoryCubit, HistoryState>(
+      builder: (context, state) {
+        if (!state.loaded) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final all = snap.data ?? const <Activity>[];
-        if (all.isEmpty) {
+        if (state.isEmpty) {
           return Center(
             child: Padding(
               padding: const EdgeInsets.all(Sizes.gapLarge),
@@ -43,10 +53,7 @@ class HistoryPage extends StatelessWidget {
         }
 
         // Grouped by day so a month of entries stays readable, newest first.
-        final grouped = <String, List<Activity>>{};
-        for (final a in all) {
-          grouped.putIfAbsent(DateKeys.day(a.at), () => []).add(a);
-        }
+        final grouped = state.byDay;
 
         return ListView(
           padding: const EdgeInsets.all(Sizes.gap),

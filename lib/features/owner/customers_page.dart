@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
@@ -7,9 +8,20 @@ import '../../core/utils/formats.dart';
 import '../../data/models/customer.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../delivery/quantity_stepper.dart';
+import 'bloc/customers_cubit.dart';
 
 class CustomersPage extends StatelessWidget {
   const CustomersPage({super.key});
+
+  @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => CustomersCubit(customers: sl<CustomerRepository>()),
+    child: const _CustomersView(),
+  );
+}
+
+class _CustomersView extends StatelessWidget {
+  const _CustomersView();
 
   @override
   Widget build(BuildContext context) {
@@ -17,11 +29,10 @@ class CustomersPage extends StatelessWidget {
     final hindi = s.lang == AppLanguage.hindi;
 
     return Scaffold(
-      body: StreamBuilder<List<Customer>>(
-        stream: sl<CustomerRepository>().watchAll(),
-        builder: (context, snap) {
-          final customers = snap.data;
-          if (customers == null) {
+      body: BlocBuilder<CustomersCubit, CustomersState>(
+        builder: (context, state) {
+          final customers = state.customers;
+          if (!state.loaded) {
             return const Center(child: CircularProgressIndicator());
           }
           if (customers.isEmpty) {
@@ -91,18 +102,29 @@ class _CustomerEditor extends StatefulWidget {
   static Future<void> show(
     BuildContext context, {
     required Customer? existing,
-  }) => showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => _CustomerEditor(existing: existing),
-  );
+  }) {
+    // A new route, outside the page's provider: hand the cubit across.
+    final cubit = context.read<CustomersCubit>();
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => BlocProvider.value(
+        value: cubit,
+        child: _CustomerEditor(existing: existing),
+      ),
+    );
+  }
 
   @override
   State<_CustomerEditor> createState() => _CustomerEditorState();
 }
 
+/// Form state only: the text controllers, stepper and switch. Saving goes
+/// through [CustomersCubit.save].
 class _CustomerEditorState extends State<_CustomerEditor> {
-  late final _name = TextEditingController(text: widget.existing?.name ?? '');
+  late final _name = TextEditingController(text: widget.existing?.name ?? '')
+    // Rebuild as the name is typed so Save enables the moment it is valid.
+    ..addListener(_onNameChanged);
   late final _nameHi = TextEditingController(
     text: widget.existing?.nameHi ?? '',
   );
@@ -116,16 +138,29 @@ class _CustomerEditorState extends State<_CustomerEditor> {
   late double _qty = widget.existing?.defaultQtyLitres ?? 1.0;
   late bool _active = widget.existing?.active ?? true;
 
+  bool _hasName = false;
+
+  void _onNameChanged() {
+    final hasName = _name.text.trim().isNotEmpty;
+    if (hasName != _hasName) setState(() => _hasName = hasName);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _hasName = _name.text.trim().isNotEmpty;
+  }
+
   @override
   void dispose() {
+    _name.removeListener(_onNameChanged);
     for (final c in [_name, _nameHi, _houseNo, _phone, _order]) {
       c.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _save() async {
-    final repo = sl<CustomerRepository>();
+  void _save() {
     final existing = widget.existing;
     final draft = Customer(
       id: existing?.id ?? '',
@@ -139,12 +174,8 @@ class _CustomerEditorState extends State<_CustomerEditor> {
       active: _active,
     );
 
-    if (existing == null) {
-      await repo.add(draft);
-    } else {
-      await repo.upsert(draft);
-    }
-    if (mounted) Navigator.of(context).pop();
+    context.read<CustomersCubit>().save(draft);
+    Navigator.of(context).pop();
   }
 
   @override
@@ -231,7 +262,7 @@ class _CustomerEditorState extends State<_CustomerEditor> {
             FilledButton.icon(
               icon: const Icon(Icons.check),
               label: Text(s.save),
-              onPressed: _name.text.trim().isEmpty ? null : _save,
+              onPressed: _hasName ? _save : null,
             ),
           ],
         ),

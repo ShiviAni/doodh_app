@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
+import '../../core/utils/validators.dart';
 import '../../data/models/bill.dart';
 import '../../data/models/customer.dart';
-import '../../data/models/delivery.dart';
 import '../../data/models/payment.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/delivery_repository.dart';
@@ -16,182 +16,121 @@ import '../../data/repositories/payment_repository.dart';
 import '../../data/repositories/report_repository.dart';
 import '../../data/repositories/settings_repository.dart';
 import '../auth/auth_service.dart';
+import 'bloc/money_cubit.dart';
 import 'stat_tile.dart';
 
-/// Who owes what, and what has been collected.
-///
-/// Everything here is owner-only at the rules level. The delivery role has no
-/// read access to payments or the rate, so none of these figures are reachable
-/// from his install even with a modified build.
-class MoneyPage extends StatefulWidget {
+/// Who owes what, and what has been collected. See [MoneyCubit].
+class MoneyPage extends StatelessWidget {
   const MoneyPage({super.key, required this.session});
 
   final Session session;
 
   @override
-  State<MoneyPage> createState() => _MoneyPageState();
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => MoneyCubit(
+      settings: sl<SettingsRepository>(),
+      customers: sl<CustomerRepository>(),
+      payments: sl<PaymentRepository>(),
+      deliveries: sl<DeliveryRepository>(),
+      ownerEmail: session.email,
+    ),
+    child: const _MoneyView(),
+  );
 }
 
-class _MoneyPageState extends State<MoneyPage> {
-  DateTime _month = DateTime.now();
-
-  String get _monthKey => DateKeys.month(_month);
+class _MoneyView extends StatelessWidget {
+  const _MoneyView();
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final hindi = s.lang == AppLanguage.hindi;
+    final cubit = context.read<MoneyCubit>();
 
-    return StreamBuilder<double>(
-      stream: sl<SettingsRepository>().watchRate(),
-      builder: (context, rateSnap) {
-        final rate = rateSnap.data ?? SettingsRepository.defaultRate;
+    return BlocBuilder<MoneyCubit, MoneyState>(
+      builder: (context, state) {
+        final pending = state.pending;
+        final bills = state.bills;
 
-        return StreamBuilder<List<Customer>>(
-          stream: sl<CustomerRepository>().watchAll(),
-          builder: (context, custSnap) {
-            final customers = custSnap.data ?? const <Customer>[];
-
-            return StreamBuilder<List<Payment>>(
-              stream: sl<PaymentRepository>().watchAll(),
-              builder: (context, paySnap) {
-                final payments = paySnap.data ?? const <Payment>[];
-                final pending = payments.where((p) => !p.approved).toList();
-
-                return StreamBuilder<List<Delivery>>(
-                  stream: sl<DeliveryRepository>().watchRange(
-                    '$_monthKey-01',
-                    DateKeys.day(DateKeys.endOfMonth(_month)),
+        return ListView(
+          padding: const EdgeInsets.all(Sizes.gap),
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                IconButton.filledTonal(
+                  icon: const Icon(Icons.chevron_left),
+                  onPressed: () => cubit.shiftMonth(-1),
+                ),
+                Expanded(
+                  child: Text(
+                    Fmt.monthLabel(state.month),
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: Sizes.bodyText,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  builder: (context, delSnap) {
-                    final deliveries = delSnap.data ?? const <Delivery>[];
-                    const calc = ReportCalculator();
+                ),
+                IconButton.filledTonal(
+                  icon: const Icon(Icons.chevron_right),
+                  onPressed: () => cubit.shiftMonth(1),
+                ),
+              ],
+            ),
+            const SizedBox(height: Sizes.gap),
 
-                    final bills = <String, Bill>{
-                      for (final c in customers)
-                        c.id: calc.billFor(
-                          customer: c,
-                          monthKey: _monthKey,
-                          monthDeliveries: deliveries,
-                          allPayments: payments,
-                          ratePerLitre: rate,
-                        ),
-                    };
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: StatTile(
+                      label: hindi ? 'कुल बिल' : 'Billed',
+                      value: Fmt.money(state.billed),
+                      icon: Icons.receipt_long_outlined,
+                    ),
+                  ),
+                  const SizedBox(width: Sizes.gap),
+                  Expanded(
+                    child: StatTile(
+                      label: hindi ? 'जमा हुआ' : 'Collected',
+                      value: Fmt.money(state.collected),
+                      icon: Icons.savings_outlined,
+                      color: AppTheme.confirm,
+                    ),
+                  ),
+                  const SizedBox(width: Sizes.gap),
+                  Expanded(
+                    child: StatTile(
+                      label: s.balance,
+                      value: Fmt.money(state.balance),
+                      icon: Icons.pending_actions_outlined,
+                      color: AppTheme.decline,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
-                    final billed = bills.values.fold<double>(
-                      0,
-                      (sum, b) => sum + b.amount,
-                    );
-                    final collected = bills.values.fold<double>(
-                      0,
-                      (sum, b) => sum + b.paidAmount,
-                    );
+            if (pending.isNotEmpty) ...[
+              const SizedBox(height: Sizes.gapLarge),
+              _ApprovalSection(pending: pending, state: state, hindi: hindi),
+            ],
 
-                    return ListView(
-                      padding: const EdgeInsets.all(Sizes.gap),
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            IconButton.filledTonal(
-                              icon: const Icon(Icons.chevron_left),
-                              onPressed: () => setState(
-                                () => _month = DateTime(
-                                  _month.year,
-                                  _month.month - 1,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                Fmt.monthLabel(_month),
-                                textAlign: TextAlign.center,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: Sizes.bodyText,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                            IconButton.filledTonal(
-                              icon: const Icon(Icons.chevron_right),
-                              onPressed: () => setState(
-                                () => _month = DateTime(
-                                  _month.year,
-                                  _month.month + 1,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: Sizes.gap),
+            const SizedBox(height: Sizes.gapLarge),
+            const Divider(),
 
-                        IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(
-                                child: StatTile(
-                                  label: hindi ? 'कुल बिल' : 'Billed',
-                                  value: Fmt.money(billed),
-                                  icon: Icons.receipt_long_outlined,
-                                ),
-                              ),
-                              const SizedBox(width: Sizes.gap),
-                              Expanded(
-                                child: StatTile(
-                                  label: hindi ? 'जमा हुआ' : 'Collected',
-                                  value: Fmt.money(collected),
-                                  icon: Icons.savings_outlined,
-                                  color: AppTheme.confirm,
-                                ),
-                              ),
-                              const SizedBox(width: Sizes.gap),
-                              Expanded(
-                                child: StatTile(
-                                  label: s.balance,
-                                  value: Fmt.money(billed - collected),
-                                  icon: Icons.pending_actions_outlined,
-                                  color: AppTheme.decline,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        if (pending.isNotEmpty) ...[
-                          const SizedBox(height: Sizes.gapLarge),
-                          _ApprovalSection(
-                            pending: pending,
-                            customers: customers,
-                            hindi: hindi,
-                            approverEmail: widget.session.email,
-                          ),
-                        ],
-
-                        const SizedBox(height: Sizes.gapLarge),
-                        const Divider(),
-
-                        for (final c in customers.where((c) => c.active))
-                          _BillRow(
-                            customer: c,
-                            bill: bills[c.id]!,
-                            perDay: calc.litresByDay(
-                              deliveries
-                                  .where((d) => d.customerId == c.id)
-                                  .toList(),
-                            ),
-                            hindi: hindi,
-                            approverEmail: widget.session.email,
-                          ),
-                      ],
-                    );
-                  },
-                );
-              },
-            );
-          },
+            for (final c in state.activeCustomers)
+              _BillRow(
+                customer: c,
+                bill: bills[c.id]!,
+                perDay: state.perDayFor(c.id),
+                hindi: hindi,
+              ),
+          ],
         );
       },
     );
@@ -205,19 +144,18 @@ class _MoneyPageState extends State<MoneyPage> {
 class _ApprovalSection extends StatelessWidget {
   const _ApprovalSection({
     required this.pending,
-    required this.customers,
+    required this.state,
     required this.hindi,
-    required this.approverEmail,
   });
 
   final List<Payment> pending;
-  final List<Customer> customers;
+  final MoneyState state;
   final bool hindi;
-  final String approverEmail;
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
+    final cubit = context.read<MoneyCubit>();
     return Container(
       padding: const EdgeInsets.all(Sizes.gap),
       decoration: BoxDecoration(
@@ -244,13 +182,7 @@ class _ApprovalSection extends StatelessWidget {
           for (final p in pending)
             ListTile(
               contentPadding: EdgeInsets.zero,
-              title: Text(
-                customers
-                        .where((c) => c.id == p.customerId)
-                        .map((c) => c.displayName(hindi: hindi))
-                        .firstOrNull ??
-                    p.customerId,
-              ),
+              title: Text(state.customerName(p.customerId, hindi: hindi)),
               subtitle: Text('${Fmt.money(p.amount)}  ·  ${p.dayKey}'),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -262,8 +194,7 @@ class _ApprovalSection extends StatelessWidget {
                       color: AppTheme.confirm,
                       size: 32,
                     ),
-                    onPressed: () =>
-                        sl<PaymentRepository>().approve(p.id, approverEmail),
+                    onPressed: () => cubit.approve(p.id),
                   ),
                   IconButton(
                     tooltip: s.reject,
@@ -272,7 +203,7 @@ class _ApprovalSection extends StatelessWidget {
                       color: AppTheme.decline,
                       size: 32,
                     ),
-                    onPressed: () => sl<PaymentRepository>().reject(p.id),
+                    onPressed: () => cubit.reject(p.id),
                   ),
                 ],
               ),
@@ -289,14 +220,12 @@ class _BillRow extends StatelessWidget {
     required this.bill,
     required this.perDay,
     required this.hindi,
-    required this.approverEmail,
   });
 
   final Customer customer;
   final Bill bill;
   final Map<String, double> perDay;
   final bool hindi;
-  final String approverEmail;
 
   Color get _statusColor => switch (bill.status) {
     BillStatus.paid => AppTheme.confirm,
@@ -394,7 +323,6 @@ class _BillRow extends StatelessWidget {
                         context,
                         customer: customer,
                         suggested: bill.balance,
-                        approverEmail: approverEmail,
                       ),
                     ),
                   ),
@@ -432,30 +360,27 @@ class _BillRow extends StatelessWidget {
 /// Owner-recorded payment. Lands approved immediately — the owner is the
 /// authority the approval queue exists to defer to.
 class _RecordPaymentSheet extends StatefulWidget {
-  const _RecordPaymentSheet({
-    required this.customer,
-    required this.suggested,
-    required this.approverEmail,
-  });
+  const _RecordPaymentSheet({required this.customer, required this.suggested});
 
   final Customer customer;
   final double suggested;
-  final String approverEmail;
 
   static Future<void> show(
     BuildContext context, {
     required Customer customer,
     required double suggested,
-    required String approverEmail,
-  }) => showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) => _RecordPaymentSheet(
-      customer: customer,
-      suggested: suggested,
-      approverEmail: approverEmail,
-    ),
-  );
+  }) {
+    // A new route, outside the page's provider: hand the cubit across.
+    final cubit = context.read<MoneyCubit>();
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => BlocProvider.value(
+        value: cubit,
+        child: _RecordPaymentSheet(customer: customer, suggested: suggested),
+      ),
+    );
+  }
 
   @override
   State<_RecordPaymentSheet> createState() => _RecordPaymentSheetState();
@@ -474,21 +399,11 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
   }
 
   void _save() {
-    final value = double.tryParse(_amount.text.trim());
-    if (value == null || value <= 0) return;
-    fireAndForget(
-      sl<PaymentRepository>().create(
-        Payment(
-          id: '',
-          customerId: widget.customer.id,
-          amount: value,
-          method: _method,
-          dayKey: DateKeys.day(DateTime.now()),
-          recordedBy: widget.approverEmail,
-          approved: true,
-          approvedBy: widget.approverEmail,
-        ),
-      ),
+    if (Validators.parsePositive(_amount.text) == null) return;
+    context.read<MoneyCubit>().recordPayment(
+      customerId: widget.customer.id,
+      amount: _amount.text,
+      method: _method,
     );
     Navigator.of(context).pop();
   }

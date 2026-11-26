@@ -77,4 +77,23 @@ void main() {
     expect(find.widgetWithText(TextField, 'Name (Hindi)'), findsOneWidget);
     expect(find.textContaining('नाम'), findsNothing);
   });
+
+  testWidgets('Save enables as soon as a name is typed', (tester) async {
+    // Regression: the button only re-checked the name on an unrelated
+    // rebuild, so typing a new house's name left Save disabled.
+    await openAddForm(tester, AppLanguage.english);
+
+    FilledButton save() => tester.widget<FilledButton>(
+      find.ancestor(of: find.text('Save'), matching: find.byType(FilledButton)),
+    );
+    expect(save().onPressed, isNull);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Customer name'),
+      'Sita',
+    );
+    await tester.pump();
+
+    expect(save().onPressed, isNotNull);
+  });
 }

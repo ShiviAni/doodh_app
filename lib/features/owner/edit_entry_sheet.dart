@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
-import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/customer.dart';
 import '../../data/models/delivery.dart';
-import '../../data/repositories/delivery_repository.dart';
-import '../auth/auth_service.dart';
 import '../delivery/quantity_stepper.dart';
+import 'bloc/today_cubit.dart';
 
 /// Owner override for any day's entry.
 ///
 /// A reason is required and stored alongside `editedBy`/`editedAt`. The point
 /// is not bureaucracy — it is that a month's bill can be reconstructed later
 /// and any correction explained, rather than a number silently changing.
+///
+/// The quantity stepper and the reason field are form state and stay local;
+/// the save goes through [TodayCubit.saveEntry].
 class EditEntrySheet extends StatefulWidget {
   const EditEntrySheet({
     super.key,
@@ -33,12 +34,23 @@ class EditEntrySheet extends StatefulWidget {
     required Customer customer,
     required String dayKey,
     required Delivery? existing,
-  }) => showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    builder: (_) =>
-        EditEntrySheet(customer: customer, dayKey: dayKey, existing: existing),
-  );
+  }) {
+    // The sheet is a new route, outside the page's provider, so the cubit is
+    // handed across explicitly.
+    final today = context.read<TodayCubit>();
+    return showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => BlocProvider.value(
+        value: today,
+        child: EditEntrySheet(
+          customer: customer,
+          dayKey: dayKey,
+          existing: existing,
+        ),
+      ),
+    );
+  }
 
   @override
   State<EditEntrySheet> createState() => _EditEntrySheetState();
@@ -57,23 +69,12 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
   }
 
   void _save(DeliveryStatus status) {
-    final email = sl<AuthService>().currentEmail ?? '';
-    // Only flag it as an edit when something was already there; the owner
-    // filling a blank house is an original entry, not a correction.
-    final isCorrection = widget.existing != null;
-
-    fireAndForget(
-      sl<DeliveryRepository>().record(
-        dayKey: widget.dayKey,
-        customerId: widget.customer.id,
-        qtyLitres: _qty,
-        status: status,
-        recordedBy: widget.existing?.recordedBy ?? email,
-        editedBy: isCorrection ? email : null,
-        editReason: isCorrection
-            ? (_reason.text.trim().isEmpty ? '—' : _reason.text.trim())
-            : null,
-      ),
+    context.read<TodayCubit>().saveEntry(
+      customer: widget.customer,
+      existing: widget.existing,
+      qtyLitres: _qty,
+      status: status,
+      reason: _reason.text,
     );
     Navigator.of(context).pop();
   }
