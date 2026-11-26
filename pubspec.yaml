@@ -13,11 +13,11 @@ dependencies:
     sdk: flutter
 
   # Firebase
-  firebase_core: ^4.1.1
-  firebase_auth: ^6.1.0
-  cloud_firestore: ^6.0.2
-  firebase_storage: ^13.0.2
-  firebase_messaging: ^16.0.2
+  firebase_core: ^5.2.0
+  firebase_auth: ^7.1.0
+  cloud_firestore: ^7.2.0
+  firebase_storage: ^14.1.0
+  firebase_messaging: ^17.1.0
   flutter_local_notifications: ^19.4.2
 
   # State / DI / routing
@@ -41,8 +41,8 @@ dependencies:
   # as real dependencies only so the demo entrypoint may live under lib/; Dart
   # tree-shakes from the entrypoint, so a release build of main.dart carries
   # none of this.
-  fake_cloud_firestore: ^4.0.0
-  firebase_auth_mocks: ^0.15.0
+  fake_cloud_firestore: ^4.4.0
+  firebase_auth_mocks: ^0.16.0
 
 dev_dependencies:
   flutter_test:
