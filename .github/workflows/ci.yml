@@ -184,23 +184,10 @@ jobs:
           fi
       - name: Dependency review
         if: github.event_name == 'pull_request'
+        # Needs GitHub Advanced Security on a private repo, so it reports but
+        # does not block. npm audit (functions job) and Dependabot still run.
+        continue-on-error: true
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
 
-  codeql:
-    name: CodeQL (Cloud Functions JS)
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-          config: |
-            paths: [functions]
-            paths-ignore: [functions/node_modules]
-      - uses: github/codeql-action/analyze@v3

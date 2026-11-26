@@ -1,0 +1,9 @@
+# Every PR requests a review from the owner. With branch protection's
+# "Require review from Code Owners" on, this approval is required to merge.
+* @ShiviAni
+
+# The security boundary and the pipeline itself: called out so a change to
+# either is never waved through as part of something else.
+/firestore.rules   @ShiviAni
+/storage.rules     @ShiviAni
+/.github/          @ShiviAni

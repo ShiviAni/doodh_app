@@ -113,7 +113,7 @@ GitHub Actions, in `.github/workflows/`:
 
 | Workflow | When | What |
 | --- | --- | --- |
-| `ci.yml` | every push and PR | format, `flutter analyze --fatal-infos`, bloc lint; tests with a coverage floor; Patrol on an Android emulator (PRs into `main`); demo APK build; Cloud Functions lint, tests and `npm audit`; gitleaks secret scan, committed-key check, dependency review; CodeQL on the functions |
+| `ci.yml` | every push and PR | format, `flutter analyze --fatal-infos`, bloc lint; tests with a coverage floor; Patrol on an Android emulator (PRs into `main`); demo APK build; Cloud Functions lint, tests and `npm audit`; gitleaks secret scan, committed-key check, dependency review |
 | `claude-review.yml` | PR opened or updated | Claude reviews the diff against `.github/REVIEW_GUIDELINES.md` and posts inline comments plus a summary. Advisory, not a merge gate |
 | `release.yml` | tag `v*.*.*` | signed, obfuscated Play Store bundle |
 
@@ -134,8 +134,9 @@ the actions themselves.
    `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
    Locally the same values go in `android/key.properties` (gitignored). Without
    it, release builds are debug-signed and must not be uploaded.
-4. **CodeQL** is free on public repos. On a private repo it needs GitHub
-   Advanced Security; if you don't have that, delete the `codeql` job.
+4. **CodeQL** is not set up: on a private repo it needs GitHub Advanced
+   Security. If the repo goes public, add GitHub's default CodeQL setup under
+   *Settings → Code security*.
 
 The coverage floor (`MIN_COVERAGE` in `ci.yml`) was set just under the measured
 69.5%. Raise it as coverage grows.
