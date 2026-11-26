@@ -11,6 +11,7 @@ import '../../data/models/delivery.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/delivery_repository.dart';
 import '../auth/auth_service.dart';
+import '../auth/bloc/session_cubit.dart';
 import 'bloc/round_cubit.dart';
 import 'cash_log_sheet.dart';
 import 'delivery_card.dart';
@@ -414,7 +415,7 @@ class _EmptyState extends StatelessWidget {
               OutlinedButton.icon(
                 icon: const Icon(Icons.logout),
                 label: Text(strings.logout),
-                onPressed: () => sl<AuthService>().signOut(),
+                onPressed: () => context.read<SessionCubit>().signOut(),
               ),
             ],
           ),

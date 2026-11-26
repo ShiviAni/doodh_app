@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/di/injector.dart';
 import 'core/l10n/strings.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/auth_service.dart';
+import 'features/auth/bloc/session_cubit.dart';
 import 'features/auth/login_page.dart';
 import 'features/delivery/delivery_shell.dart';
 import 'features/owner/owner_shell.dart';
@@ -22,25 +24,28 @@ class DoodhApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LanguageScope(
-      initial: loadLanguage(),
-      onChanged: saveLanguage,
-      child: Builder(
-        builder: (context) => MaterialApp(
-          title: S.of(context).appName,
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [Locale('hi'), Locale('en')],
-          locale: LanguageScope.current(context) == AppLanguage.hindi
-              ? const Locale('hi')
-              : const Locale('en'),
-          home: const _RootGate(),
+    return BlocProvider(
+      create: (_) => SessionCubit(auth: sl<AuthService>()),
+      child: LanguageScope(
+        initial: loadLanguage(),
+        onChanged: saveLanguage,
+        child: Builder(
+          builder: (context) => MaterialApp(
+            title: S.of(context).appName,
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('hi'), Locale('en')],
+            locale: LanguageScope.current(context) == AppLanguage.hindi
+                ? const Locale('hi')
+                : const Locale('en'),
+            home: const _RootGate(),
+          ),
         ),
       ),
     );
@@ -57,16 +62,15 @@ class _RootGate extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<Session?>(
-      stream: sl<AuthService>().watchSession(),
-      builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+    return BlocBuilder<SessionCubit, SessionState>(
+      builder: (context, state) {
+        if (!state.resolved) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
         }
 
-        final session = snap.data;
+        final session = state.session;
         if (session == null) return const LoginPage();
         if (!session.hasAccess) return _NoAccessPage(email: session.email);
 
@@ -108,7 +112,7 @@ class _NoAccessPage extends StatelessWidget {
               OutlinedButton.icon(
                 icon: const Icon(Icons.logout),
                 label: Text(s.logout),
-                onPressed: () => sl<AuthService>().signOut(),
+                onPressed: context.read<SessionCubit>().signOut,
               ),
             ],
           ),

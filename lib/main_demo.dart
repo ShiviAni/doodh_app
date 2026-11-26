@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'core/di/injector.dart';
@@ -11,6 +12,7 @@ import 'core/utils/formats.dart';
 import 'data/models/member.dart';
 import 'demo/demo_seed.dart';
 import 'features/auth/auth_service.dart';
+import 'features/auth/bloc/session_cubit.dart';
 import 'features/delivery/delivery_shell.dart';
 import 'features/owner/owner_shell.dart';
 
@@ -46,25 +48,30 @@ class DemoApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LanguageScope(
-      initial: loadLanguage(),
-      onChanged: saveLanguage,
-      child: Builder(
-        builder: (context) => MaterialApp(
-          title: 'Doodh Hisab (demo)',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.light(),
-          darkTheme: AppTheme.dark(),
-          localizationsDelegates: const [
-            GlobalMaterialLocalizations.delegate,
-            GlobalWidgetsLocalizations.delegate,
-            GlobalCupertinoLocalizations.delegate,
-          ],
-          supportedLocales: const [Locale('hi'), Locale('en')],
-          locale: LanguageScope.current(context) == AppLanguage.hindi
-              ? const Locale('hi')
-              : const Locale('en'),
-          home: const RolePicker(),
+    // Signing out in the demo signs out of the mock auth; the role picker
+    // stays on screen regardless.
+    return BlocProvider(
+      create: (_) => SessionCubit(auth: sl<AuthService>()),
+      child: LanguageScope(
+        initial: loadLanguage(),
+        onChanged: saveLanguage,
+        child: Builder(
+          builder: (context) => MaterialApp(
+            title: 'Doodh Hisab (demo)',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            localizationsDelegates: const [
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+              GlobalCupertinoLocalizations.delegate,
+            ],
+            supportedLocales: const [Locale('hi'), Locale('en')],
+            locale: LanguageScope.current(context) == AppLanguage.hindi
+                ? const Locale('hi')
+                : const Locale('en'),
+            home: const RolePicker(),
+          ),
         ),
       ),
     );
