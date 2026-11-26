@@ -13,7 +13,7 @@
     "lint": "node --check index.js && node --check test_triggers.js"
   },
   "dependencies": {
-    "firebase-admin": "^13.0.0",
+    "firebase-admin": "^14.5.1",
     "firebase-functions": "^6.1.0"
   },
   "private": true
