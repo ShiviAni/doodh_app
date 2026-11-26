@@ -16,11 +16,13 @@ concurrency:
 
 jobs:
   review:
-    # Drafts are skipped until they are marked ready. PRs from forks are
-    # skipped because they cannot read the API key secret.
+    # Drafts are skipped until they are marked ready. PRs from forks and from
+    # Dependabot are skipped: GitHub does not give either the API key secret,
+    # and dependency bumps are covered by CI and dependency review.
     if: >-
       !github.event.pull_request.draft &&
-      github.event.pull_request.head.repo.full_name == github.repository
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
