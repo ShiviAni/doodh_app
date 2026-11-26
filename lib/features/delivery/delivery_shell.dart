@@ -1,5 +1,7 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
@@ -9,10 +11,10 @@ import '../../data/models/delivery.dart';
 import '../../data/repositories/customer_repository.dart';
 import '../../data/repositories/delivery_repository.dart';
 import '../auth/auth_service.dart';
+import 'bloc/round_cubit.dart';
 import 'cash_log_sheet.dart';
 import 'delivery_card.dart';
 import 'delivery_list_page.dart';
-import 'round_controller.dart';
 import 'sync_badge.dart';
 import 'voice/speech_service.dart';
 import 'voice/voice_entry_sheet.dart';
@@ -33,16 +35,7 @@ class DeliveryShell extends StatefulWidget {
 }
 
 class _DeliveryShellState extends State<DeliveryShell> {
-  late final RoundController _round = RoundController(
-    deliveries: sl<DeliveryRepository>(),
-    recordedBy: widget.session.email,
-  );
-
-  final _searchController = TextEditingController();
   late final SpeechService _speech = sl<SpeechService>();
-
-  String _query = '';
-  bool _searching = false;
 
   @override
   void initState() {
@@ -53,30 +46,64 @@ class _DeliveryShellState extends State<DeliveryShell> {
   }
 
   @override
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => RoundCubit(
+      customers: sl<CustomerRepository>(),
+      deliveries: sl<DeliveryRepository>(),
+      recordedBy: widget.session.email,
+    ),
+    child: _RoundView(session: widget.session, speech: _speech),
+  );
+}
+
+class _RoundView extends StatefulWidget {
+  const _RoundView({required this.session, required this.speech});
+
+  final Session session;
+  final SpeechService speech;
+
+  @override
+  State<_RoundView> createState() => _RoundViewState();
+}
+
+/// Only the search field's open/closed toggle and its text controller live
+/// here; everything about the round itself is in [RoundCubit].
+class _RoundViewState extends State<_RoundView> {
+  final _searchController = TextEditingController();
+  bool _searching = false;
+
+  RoundCubit get _round => context.read<RoundCubit>();
+
+  @override
   void dispose() {
     _searchController.dispose();
-    _round.dispose();
     super.dispose();
   }
 
+  void _toggleSearch() {
+    setState(() => _searching = !_searching);
+    if (!_searching) {
+      _searchController.clear();
+      _round.search('');
+    }
+  }
+
+  void _record(Customer customer, double qty, DeliveryStatus status) =>
+      _round.record(customerId: customer.id, qtyLitres: qty, status: status);
+
   /// Open one house's entry card.
   Future<void> _openCustomer(Customer customer) async {
+    final state = _round.state;
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _EntrySheet(
         customer: customer,
-        existing: _round.entryFor(customer.id),
-        dayKey: _round.dayKey,
+        existing: state.entryFor(customer.id),
+        dayKey: state.dayKey,
         recordedBy: widget.session.email,
-        speech: _speech,
-        onRecord: (qty, status) {
-          _round.recordFor(
-            customerId: customer.id,
-            qtyLitres: qty,
-            status: status,
-          );
-        },
+        speech: widget.speech,
+        onRecord: (qty, status) => _record(customer, qty, status),
       ),
     );
   }
@@ -84,16 +111,12 @@ class _DeliveryShellState extends State<DeliveryShell> {
   Future<void> _openVoice() async {
     final result = await VoiceEntrySheet.show(
       context,
-      customers: _round.customers,
-      speech: _speech,
+      customers: _round.state.customers,
+      speech: widget.speech,
     );
     if (result == null || !mounted) return;
 
-    _round.recordFor(
-      customerId: result.customer.id,
-      qtyLitres: result.qtyLitres,
-      status: result.status,
-    );
+    _record(result.customer, result.qtyLitres, result.status);
 
     final s = S.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
@@ -111,86 +134,72 @@ class _DeliveryShellState extends State<DeliveryShell> {
   Widget build(BuildContext context) {
     final s = S.of(context);
 
-    return StreamBuilder<List<Customer>>(
-      stream: sl<CustomerRepository>().watchActive(),
-      builder: (context, customerSnap) {
-        return StreamBuilder<Map<String, Delivery>>(
-          stream: sl<DeliveryRepository>().watchDay(_round.dayKey),
-          builder: (context, deliverySnap) {
-            final customers = customerSnap.data;
-            if (customers == null) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
+    return BlocBuilder<RoundCubit, RoundState>(
+      builder: (context, round) {
+        // A stream error before any customers arrived keeps the spinner, as
+        // the StreamBuilder did. Firestore retries on its own, and saying
+        // "no houses" would be wrong.
+        final waiting =
+            round.status == RoundStatus.loading ||
+            (round.status == RoundStatus.failure && round.customers.isEmpty);
+        if (waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (round.customers.isEmpty) return _EmptyState(strings: s);
 
-            _round.setCustomers(customers);
-            _round.setRecorded(deliverySnap.data ?? const {});
-
-            if (customers.isEmpty) return _EmptyState(strings: s);
-
-            return AnimatedBuilder(
-              animation: _round,
-              builder: (context, _) => Scaffold(
-                appBar: AppBar(
-                  toolbarHeight: 76,
-                  automaticallyImplyLeading: false,
-                  title: _searching
-                      ? TextField(
-                          controller: _searchController,
-                          autofocus: true,
-                          decoration: InputDecoration(
-                            hintText: s.searchHint,
-                            border: InputBorder.none,
-                          ),
-                          style: const TextStyle(fontSize: Sizes.bodyText),
-                          onChanged: (v) => setState(() => _query = v),
-                        )
-                      : _Progress(done: _round.doneCount, total: _round.total),
-                  actions: [
-                    IconButton(
-                      iconSize: 30,
-                      icon: Icon(_searching ? Icons.close : Icons.search),
-                      onPressed: () => setState(() {
-                        _searching = !_searching;
-                        if (!_searching) {
-                          _query = '';
-                          _searchController.clear();
-                        }
-                      }),
+        return Scaffold(
+          appBar: AppBar(
+            toolbarHeight: 76,
+            automaticallyImplyLeading: false,
+            title: _searching
+                ? TextField(
+                    controller: _searchController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: s.searchHint,
+                      border: InputBorder.none,
                     ),
-                    if (!_searching) SyncBadge(dayKey: _round.dayKey),
-                  ],
-                ),
-                body: SafeArea(
-                  child: Column(
-                    children: [
-                      if (_round.isComplete) _CompleteBanner(strings: s),
-                      Expanded(
-                        child: DeliveryListPage(
-                          customers: _round.customers,
-                          recorded: _round.recorded,
-                          query: _query,
-                          onTapCustomer: _openCustomer,
-                        ),
-                      ),
-                    ],
+                    style: const TextStyle(fontSize: Sizes.bodyText),
+                    onChanged: _round.search,
+                  )
+                : _Progress(done: round.doneCount, total: round.total),
+            actions: [
+              IconButton(
+                iconSize: 30,
+                icon: Icon(_searching ? Icons.close : Icons.search),
+                onPressed: _toggleSearch,
+              ),
+              if (!_searching) SyncBadge(dayKey: round.dayKey),
+            ],
+          ),
+          body: SafeArea(
+            child: Column(
+              children: [
+                if (round.isComplete) _CompleteBanner(strings: s),
+                Expanded(
+                  child: DeliveryListPage(
+                    customers: round.customers,
+                    recorded: round.recorded,
+                    query: round.query,
+                    onTapCustomer: _openCustomer,
                   ),
                 ),
-                // The mic is the largest control on the screen because it is
-                // the fastest way to record without reading anything at all.
-                floatingActionButton: FloatingActionButton.large(
-                  backgroundColor: AppTheme.confirm,
-                  foregroundColor: Colors.white,
-                  onPressed: _openVoice,
-                  tooltip: s.lang == AppLanguage.hindi
-                      ? 'बोलकर भरें'
-                      : 'Record by voice',
-                  child: const Icon(Icons.mic, size: 44),
-                ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
+          // The mic is the largest control on the screen because it is the
+          // fastest way to record without reading anything at all.
+          floatingActionButton: FloatingActionButton.large(
+            backgroundColor: AppTheme.confirm,
+            foregroundColor: Colors.white,
+            onPressed: _openVoice,
+            tooltip: s.lang == AppLanguage.hindi
+                ? 'बोलकर भरें'
+                : 'Record by voice',
+            child: const Icon(Icons.mic, size: 44),
+          ),
         );
       },
     );

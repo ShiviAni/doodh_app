@@ -1,35 +1,19 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../core/l10n/strings.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formats.dart';
 import '../../../data/models/customer.dart';
-import '../../../data/models/delivery.dart';
+import 'bloc/voice_entry_bloc.dart';
 import 'speech_service.dart';
 import 'voice_parser.dart';
 
-/// Result handed back when he confirms a spoken entry.
-class VoiceResult {
-  const VoiceResult({
-    required this.customer,
-    required this.qtyLitres,
-    required this.status,
-  });
+export 'bloc/voice_entry_bloc.dart' show VoiceResult;
 
-  final Customer customer;
-  final double qtyLitres;
-  final DeliveryStatus status;
-}
-
-/// Speak-to-record: "राम कुमार ढाई लीटर".
-///
-/// Always ends in an explicit confirmation rather than saving straight from the
-/// recogniser. Speech recognition of Indian names is unreliable enough that a
-/// silent save would eventually put milk against the wrong house, and a wrong
-/// house is a wrong bill at the end of the month.
-class VoiceEntrySheet extends StatefulWidget {
+/// Speak-to-record sheet. The logic lives in [VoiceEntryBloc]; this only
+/// shows what it heard and asks for an explicit confirmation.
+class VoiceEntrySheet extends StatelessWidget {
   const VoiceEntrySheet({
     super.key,
     required this.customers,
@@ -43,12 +27,12 @@ class VoiceEntrySheet extends StatefulWidget {
 
   /// Resolved by the caller, which has a settled context.
   ///
-  /// Listening starts from initState, and reading an InheritedWidget there is
-  /// illegal — doing so threw before listen() was ever reached, leaving the
-  /// sheet showing "speak now" while the microphone was never opened.
+  /// Listening starts as soon as the sheet is built, and reading an
+  /// InheritedWidget that early is illegal. Doing so once threw before listen()
+  /// was reached, leaving "speak now" on screen with the microphone shut.
   final String localeId;
 
-  /// Set when opened from a house's own card — then only the quantity is
+  /// Set when opened from a house's own card. Then only the quantity is
   /// listened for and the name is not second-guessed.
   final Customer? fixedCustomer;
 
@@ -64,221 +48,132 @@ class VoiceEntrySheet extends StatefulWidget {
     builder: (_) => VoiceEntrySheet(
       customers: customers,
       speech: speech,
-      // Resolved here, where the context is settled — the sheet's own
-      // initState cannot read it.
       localeId: S.of(context).lang == AppLanguage.hindi ? 'hi_IN' : 'en_IN',
       fixedCustomer: fixedCustomer,
     ),
   );
 
   @override
-  State<VoiceEntrySheet> createState() => _VoiceEntrySheetState();
+  Widget build(BuildContext context) => BlocProvider(
+    create: (_) => VoiceEntryBloc(
+      speech: speech,
+      customers: customers,
+      localeId: localeId,
+      fixedCustomer: fixedCustomer,
+    )..add(const VoiceListenRequested()),
+    child: _VoiceEntryView(quantityOnly: fixedCustomer != null),
+  );
 }
 
-class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
-  static const _parser = VoiceParser();
+class _VoiceEntryView extends StatelessWidget {
+  const _VoiceEntryView({required this.quantityOnly});
 
-  String _transcript = '';
-  VoiceEntry? _entry;
-  bool _listening = false;
-  bool _unavailable = false;
-  bool _heardNothing = false;
-  Timer? _watchdog;
-
-  /// How long to wait for the first word before giving up.
-  ///
-  /// A device with no speech service reports itself as available and then
-  /// simply never returns a result, so without this the sheet sits on
-  /// "speak now" forever while he talks at it. Silence and a missing
-  /// recogniser look identical from here, so both end in the same advice.
-  static const _firstWordTimeout = Duration(seconds: 9);
-
-  @override
-  void initState() {
-    super.initState();
-    unawaited(_start());
-  }
-
-  @override
-  void dispose() {
-    _watchdog?.cancel();
-    unawaited(widget.speech.cancel());
-    super.dispose();
-  }
-
-  Future<void> _start() async {
-    final ok = widget.speech.isAvailable || await widget.speech.initialise();
-    if (!mounted) return;
-    if (!ok) {
-      setState(() => _unavailable = true);
-      return;
-    }
-
-    setState(() {
-      _listening = true;
-      _heardNothing = false;
-      _transcript = '';
-      _entry = null;
-    });
-
-    _watchdog?.cancel();
-    _watchdog = Timer(_firstWordTimeout, () {
-      if (!mounted || _transcript.isNotEmpty) return;
-      unawaited(widget.speech.cancel());
-      setState(() {
-        _listening = false;
-        _heardNothing = true;
-      });
-    });
-
-    await widget.speech.listen(
-      localeId: widget.localeId,
-      onError: (_) {
-        if (!mounted) return;
-        _watchdog?.cancel();
-        setState(() {
-          _listening = false;
-          _heardNothing = true;
-        });
-      },
-      onResult: (text, isFinal) {
-        if (!mounted) return;
-        if (text.isNotEmpty) _watchdog?.cancel();
-        setState(() {
-          _transcript = text;
-          _entry = _interpret(text);
-          if (isFinal) _listening = false;
-        });
-      },
-    );
-  }
-
-  /// On a card the house is already known, so only a quantity is looked for.
-  VoiceEntry _interpret(String text) {
-    final fixed = widget.fixedCustomer;
-    if (fixed == null) return _parser.parse(text, widget.customers);
-
-    final qty = _parser.parseQuantity(text);
-    return VoiceEntry(
-      transcript: text,
-      customer: fixed,
-      qtyLitres: qty,
-      skipped: qty == 0,
-      nameConfidence: 1,
-    );
-  }
-
-  void _confirm() {
-    final entry = _entry;
-    if (entry == null || !entry.isUsable) return;
-    Navigator.of(context).pop(
-      VoiceResult(
-        customer: entry.customer!,
-        qtyLitres: entry.qtyLitres ?? 0,
-        status: entry.skipped
-            ? DeliveryStatus.skipped
-            : DeliveryStatus.delivered,
-      ),
-    );
-  }
+  final bool quantityOnly;
 
   @override
   Widget build(BuildContext context) {
     final s = S.of(context);
     final hindi = s.lang == AppLanguage.hindi;
+    final bloc = context.read<VoiceEntryBloc>();
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: Sizes.gapLarge,
-        right: Sizes.gapLarge,
-        top: Sizes.gapLarge,
-        bottom: MediaQuery.of(context).viewInsets.bottom + Sizes.gapLarge,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (_unavailable)
-            _Unavailable(hindi: hindi)
-          else if (_heardNothing)
-            _HeardNothing(hindi: hindi)
-          else ...[
-            _MicIndicator(listening: _listening),
-            const SizedBox(height: Sizes.gap),
-            Text(
-              _listening
-                  ? (hindi ? 'बोलिए…' : 'Speak now…')
-                  : (hindi ? 'सुन लिया' : 'Got it'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: Sizes.bodyText + 2,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              widget.fixedCustomer != null
-                  ? (hindi ? 'जैसे: "ढाई लीटर"' : 'e.g. "two and half"')
-                  : (hindi
-                        ? 'जैसे: "राम कुमार ढाई लीटर"'
-                        : 'e.g. "Ram Kumar two and half"'),
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 14,
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: Sizes.gap),
-            if (_transcript.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(Sizes.gap),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(Sizes.radius),
-                ),
-                child: Text(
-                  _transcript,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: Sizes.bodyText),
+    return BlocBuilder<VoiceEntryBloc, VoiceEntryState>(
+      builder: (context, state) => Padding(
+        padding: EdgeInsets.only(
+          left: Sizes.gapLarge,
+          right: Sizes.gapLarge,
+          top: Sizes.gapLarge,
+          bottom: MediaQuery.of(context).viewInsets.bottom + Sizes.gapLarge,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (state.phase == VoicePhase.unavailable)
+              _Unavailable(hindi: hindi)
+            else if (state.phase == VoicePhase.heardNothing)
+              _HeardNothing(hindi: hindi)
+            else ...[
+              _MicIndicator(listening: state.isListening),
+              const SizedBox(height: Sizes.gap),
+              Text(
+                state.isListening
+                    ? (hindi ? 'बोलिए…' : 'Speak now…')
+                    : (hindi ? 'सुन लिया' : 'Got it'),
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: Sizes.bodyText + 2,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            const SizedBox(height: Sizes.gap),
-            _Understood(entry: _entry, hindi: hindi),
-          ],
-          const SizedBox(height: Sizes.gapLarge),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: const Icon(Icons.refresh),
-                  label: Text(hindi ? 'फिर से' : 'Again'),
-                  onPressed: _unavailable ? null : _start,
+              const SizedBox(height: 6),
+              Text(
+                quantityOnly
+                    ? (hindi ? 'जैसे: "ढाई लीटर"' : 'e.g. "two and half"')
+                    : (hindi
+                          ? 'जैसे: "राम कुमार ढाई लीटर"'
+                          : 'e.g. "Ram Kumar two and half"'),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
               ),
-              const SizedBox(width: Sizes.gap),
-              Expanded(
-                flex: 2,
-                child: FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.confirm,
-                    foregroundColor: Colors.white,
+              const SizedBox(height: Sizes.gap),
+              if (state.transcript.isNotEmpty)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(Sizes.gap),
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(Sizes.radius),
                   ),
-                  icon: const Icon(Icons.check_circle),
-                  label: Text(s.save),
-                  // Deliberately disabled until a house *and* a quantity are
-                  // both understood — never a half-guessed save.
-                  onPressed: (_entry?.isUsable ?? false) ? _confirm : null,
+                  child: Text(
+                    state.transcript,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: Sizes.bodyText),
+                  ),
                 ),
-              ),
+              const SizedBox(height: Sizes.gap),
+              _Understood(entry: state.entry, hindi: hindi),
             ],
-          ),
-          const SizedBox(height: Sizes.gap),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(s.cancel),
-          ),
-        ],
+            const SizedBox(height: Sizes.gapLarge),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.refresh),
+                    label: Text(hindi ? 'फिर से' : 'Again'),
+                    onPressed: state.phase == VoicePhase.unavailable
+                        ? null
+                        : () => bloc.add(const VoiceListenRequested()),
+                  ),
+                ),
+                const SizedBox(width: Sizes.gap),
+                Expanded(
+                  flex: 2,
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.confirm,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.check_circle),
+                    label: Text(s.save),
+                    onPressed: state.canConfirm
+                        ? () => Navigator.of(context).pop(state.result)
+                        : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: Sizes.gap),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text(s.cancel),
+            ),
+          ],
+        ),
       ),
     );
   }

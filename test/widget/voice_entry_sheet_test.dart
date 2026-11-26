@@ -1,56 +1,11 @@
 import 'package:doodh_app/core/l10n/strings.dart';
 import 'package:doodh_app/core/theme/app_theme.dart';
 import 'package:doodh_app/data/models/customer.dart';
-import 'package:doodh_app/features/delivery/voice/speech_service.dart';
 import 'package:doodh_app/features/delivery/voice/voice_entry_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Scriptable stand-in for the platform recogniser.
-class FakeSpeechService implements SpeechService {
-  FakeSpeechService({this.available = true, this.transcript, this.error});
-
-  final bool available;
-
-  /// Delivered as a final result when listening starts. Null means the
-  /// recogniser never answers — the case a real device with no speech service
-  /// produces.
-  final String? transcript;
-  final String? error;
-
-  bool listenCalled = false;
-  String? lastLocale;
-
-  @override
-  bool get isAvailable => available;
-
-  @override
-  bool get isListening => false;
-
-  @override
-  Future<bool> initialise() async => available;
-
-  @override
-  Future<void> listen({
-    required void Function(String transcript, bool isFinal) onResult,
-    void Function(String message)? onError,
-    String localeId = 'hi_IN',
-  }) async {
-    listenCalled = true;
-    lastLocale = localeId;
-    if (error != null) {
-      onError?.call(error!);
-      return;
-    }
-    if (transcript != null) onResult(transcript!, true);
-  }
-
-  @override
-  Future<void> stop() async {}
-
-  @override
-  Future<void> cancel() async {}
-}
+import '../helpers/fake_speech_service.dart';
 
 void _usePhoneScreen(WidgetTester tester) {
   tester.view.physicalSize = const Size(1080, 2400);
