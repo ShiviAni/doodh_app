@@ -55,3 +55,6 @@ GoogleService-Info.plist
 # Patrol
 patrol_test/test_bundle.dart
 .patrol.env
+
+# Claude Code worktrees: separate checkouts, never part of this repo
+.claude/worktrees/
