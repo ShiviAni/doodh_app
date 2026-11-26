@@ -26,7 +26,16 @@ import 'features/owner/owner_shell.dart';
 /// A role switcher replaces the login screen.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await bootstrapDemo();
+  runApp(const DemoApp());
+}
 
+/// Seeds the fake Firestore and registers every service against it.
+///
+/// Shared with the Patrol tests in patrol_test/, which drive this same app
+/// on a device. Safe to call again: the service locator is reset first.
+Future<void> bootstrapDemo({AppLanguage? language}) async {
+  await sl.reset();
   final db = await DemoSeed.build();
   await setupInjector(
     firestore: db,
@@ -39,8 +48,7 @@ Future<void> main() async {
       ),
     ),
   );
-
-  runApp(const DemoApp());
+  if (language != null) await saveLanguage(language);
 }
 
 class DemoApp extends StatelessWidget {

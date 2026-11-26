@@ -51,3 +51,7 @@ google-services.json
 GoogleService-Info.plist
 .env
 .env.local
+
+# Patrol
+patrol_test/test_bundle.dart
+.patrol.env

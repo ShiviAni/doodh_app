@@ -52,6 +52,15 @@ dev_dependencies:
   mocktail: ^1.0.5
   bloc_lint: ^0.4.1
   bloc_tools: ^0.1.0-dev.25
+  patrol: ^4.12.0
 
 flutter:
   uses-material-design: true
+
+# Patrol integration tests live in patrol_test/ and run the demo entrypoint
+# (fake Firestore, no Firebase project), so CI needs no secrets.
+patrol:
+  app_name: Doodh Hisab
+  test_directory: patrol_test
+  android:
+    package_name: com.shivani.doodh_app
