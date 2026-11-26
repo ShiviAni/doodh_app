@@ -122,9 +122,11 @@ the actions themselves.
 
 ### One-time setup
 
-1. **Repository secret `ANTHROPIC_API_KEY`**, and install the Claude GitHub app
-   on the repo (`/install-github-app` in Claude Code does both). Without it the
-   review job fails; the CI checks are unaffected.
+1. **Claude review runs on your Claude subscription.** Run `claude setup-token`
+   in a terminal, save the printed token as the repository secret
+   `CLAUDE_CODE_OAUTH_TOKEN`, and install the Claude GitHub app on the repo
+   (https://github.com/apps/claude). Without them the review job fails; the CI
+   checks are unaffected.
 2. **Branch protection on `main`**: require a pull request with one approval,
    and require the checks *Format, analyze, bloc lint*, *Unit and widget tests*,
    *Patrol integration tests (Android)*, *Build debug APK*, *Cloud Functions* and

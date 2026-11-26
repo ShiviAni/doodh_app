@@ -4,8 +4,10 @@ name: Claude PR review
 # comments plus one summary comment. It advises; it does not block merging.
 # The CI checks and a human approval are the merge gates.
 #
-# Setup: add the ANTHROPIC_API_KEY repository secret and install the Claude
-# GitHub app on the repo (README, "CI").
+# Setup: runs on the owner's Claude subscription. Create a token with
+# `claude setup-token`, store it as the CLAUDE_CODE_OAUTH_TOKEN repository
+# secret, and install the Claude GitHub app on the repo (README, "CI").
+# Reviews count against the subscription's usage limits.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -35,7 +37,7 @@ jobs:
           fetch-depth: 0
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
