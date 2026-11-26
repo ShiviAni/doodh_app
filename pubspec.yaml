@@ -34,7 +34,7 @@ dependencies:
   share_plus: ^11.0.0
   image_picker: ^1.2.0
   speech_to_text: ^7.0.0
-  cupertino_icons: ^1.0.8
+  cupertino_icons: ^2.0.0
 
   # In-memory Firebase doubles. Used by test/ and by lib/main_demo.dart, which
   # runs the whole UI on seeded sample data with no Firebase project. Declared
