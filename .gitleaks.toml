@@ -1,0 +1,13 @@
+# Secret-scan config for CI (.github/workflows/ci.yml, "security" job).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Known public identifiers"
+paths = [
+  # FlutterFire client config. Firebase API keys identify the project to
+  # Google; they are not credentials. Access is enforced by firestore.rules
+  # and storage.rules, which is where review attention belongs.
+  '''lib/firebase_options\.dart''',
+  '''functions/package-lock\.json''',
+]

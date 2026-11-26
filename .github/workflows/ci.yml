@@ -1,0 +1,206 @@
+name: CI
+
+# Runs on every push and every pull request. Each job is a required check on
+# main (see README "CI"), so nothing merges red.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch or PR cancels the run it replaces.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned to the version in .metadata, so CI and local builds match.
+  FLUTTER_VERSION: "3.44.9"
+  # Lines of lib/ covered by flutter test. Measured at 69.5% when this was
+  # set; raise it as coverage grows, never lower it to get a PR through.
+  MIN_COVERAGE: "65"
+
+jobs:
+  quality:
+    name: Format, analyze, bloc lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Format
+        run: dart format --output=none --set-exit-if-changed lib test patrol_test
+      - name: Analyze
+        run: flutter analyze --fatal-infos lib test patrol_test
+      - name: Bloc lint
+        # bloc_tools offers an interactive update prompt; answer it.
+        run: echo N | dart run bloc_tools:bloc lint lib
+      - name: Outdated dependencies (report only)
+        run: flutter pub outdated --no-dev-dependencies || true
+
+  test:
+    name: Unit and widget tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter test --coverage --reporter expanded
+      - name: Coverage gate
+        run: |
+          pct=$(awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} END{printf "%.1f", lh*100/lf}' coverage/lcov.info)
+          echo "Line coverage: ${pct}% (minimum ${MIN_COVERAGE}%)"
+          echo "### Coverage: ${pct}% (minimum ${MIN_COVERAGE}%)" >> "$GITHUB_STEP_SUMMARY"
+          awk -v p="$pct" -v m="$MIN_COVERAGE" 'BEGIN{exit !(p+0 >= m+0)}'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          retention-days: 14
+
+  integration:
+    name: Patrol integration tests (Android)
+    # The slowest job: only for PRs into main and pushes to main.
+    if: github.event_name != 'pull_request' || github.base_ref == 'main'
+    needs: [quality, test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Install patrol_cli
+        run: |
+          dart pub global activate patrol_cli 4.10.0
+          echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+      - name: Run Patrol on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: patrol test --verbose
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: patrol-reports
+          path: build/app/reports/androidTests/
+          retention-days: 14
+
+  build:
+    name: Build debug APK
+    needs: [quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      # The demo entrypoint needs no google-services.json, which is not in
+      # the repo. The real build happens in release.yml with secrets.
+      - run: flutter build apk --debug -t lib/main_demo.dart
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 7
+
+  functions:
+    name: Cloud Functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: Known vulnerabilities in production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Secret scan (gitleaks)
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz \
+            | tar -xz gitleaks
+          ./gitleaks git --config .gitleaks.toml --redact --verbose --exit-code 1 .
+      - name: No signing keys or service configs committed
+        run: |
+          bad=$(git ls-files | grep -E '(^|/)(google-services\.json|GoogleService-Info\.plist|key\.properties|service-account.*\.json)$|\.(jks|keystore|p12|pem)$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::These must not be committed:"; echo "$bad"; exit 1
+          fi
+      - name: Dependency review
+        if: github.event_name == 'pull_request'
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  codeql:
+    name: CodeQL (Cloud Functions JS)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          config: |
+            paths: [functions]
+            paths-ignore: [functions/node_modules]
+      - uses: github/codeql-action/analyze@v3

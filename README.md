@@ -78,16 +78,64 @@ lib/
       voice/     speech service + Hindi/English quantity and name parser
     owner/       today, history, reports, customers, money, settings
     notifications/ FCM registration + foreground display
+    */bloc/      one Cubit (or Bloc) per screen: streams, writes, derived figures
+test/
+  bloc/          bloc_test suites for every cubit
+  unit/, widget/
+patrol_test/     on-device integration tests (Patrol), run against the demo app
 functions/       Cloud Functions: change history + push (Node)
 firestore.rules  the security boundary
 ```
 
+State is managed with **flutter_bloc**. Widgets never talk to a repository:
+each screen's cubit owns its Firestore listeners and writes, and the widget
+only renders its state. See `.github/REVIEW_GUIDELINES.md` for the rules.
+
 ## Commands
 
 ```bash
-flutter test                          # 90 tests
-flutter analyze                       # clean
-cd functions && node --test test_triggers.js   # 9 tests
+flutter test                                  # unit, widget and bloc tests
+flutter analyze --fatal-infos lib test patrol_test
+echo N | dart run bloc_tools:bloc lint lib    # bloc rules
+dart format lib test patrol_test
+patrol test                                   # on-device tests; needs an emulator
+cd functions && npm test                      # Cloud Functions tests
+flutter run -t lib/main_demo.dart             # whole app on seeded data, no Firebase
 flutter run
-flutter build apk --release
 ```
+
+`patrol test` needs `dart pub global activate patrol_cli` once, and `adb` on
+your `PATH`.
+
+## CI
+
+GitHub Actions, in `.github/workflows/`:
+
+| Workflow | When | What |
+| --- | --- | --- |
+| `ci.yml` | every push and PR | format, `flutter analyze --fatal-infos`, bloc lint; tests with a coverage floor; Patrol on an Android emulator (PRs into `main`); demo APK build; Cloud Functions lint, tests and `npm audit`; gitleaks secret scan, committed-key check, dependency review; CodeQL on the functions |
+| `claude-review.yml` | PR opened or updated | Claude reviews the diff against `.github/REVIEW_GUIDELINES.md` and posts inline comments plus a summary. Advisory, not a merge gate |
+| `release.yml` | tag `v*.*.*` | signed, obfuscated Play Store bundle |
+
+Dependabot (`.github/dependabot.yml`) opens weekly update PRs for pub, npm and
+the actions themselves.
+
+### One-time setup
+
+1. **Repository secret `ANTHROPIC_API_KEY`**, and install the Claude GitHub app
+   on the repo (`/install-github-app` in Claude Code does both). Without it the
+   review job fails; the CI checks are unaffected.
+2. **Branch protection on `main`**: require a pull request with one approval,
+   and require the checks *Format, analyze, bloc lint*, *Unit and widget tests*,
+   *Patrol integration tests (Android)*, *Build debug APK*, *Cloud Functions* and
+   *Security checks*.
+3. **Release secrets** (only when you start shipping from CI), in a `release`
+   environment: `GOOGLE_SERVICES_JSON_BASE64`, `ANDROID_KEYSTORE_BASE64`,
+   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+   Locally the same values go in `android/key.properties` (gitignored). Without
+   it, release builds are debug-signed and must not be uploaded.
+4. **CodeQL** is free on public repos. On a private repo it needs GitHub
+   Advanced Security; if you don't have that, delete the `codeql` job.
+
+The coverage floor (`MIN_COVERAGE` in `ci.yml`) was set just under the measured
+69.5%. Raise it as coverage grows.

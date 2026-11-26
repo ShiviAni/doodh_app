@@ -2,11 +2,15 @@
   "name": "doodh-functions",
   "description": "Change history and push notifications for Doodh Hisab",
   "main": "index.js",
-  "engines": { "node": "22" },
+  "engines": {
+    "node": "22"
+  },
   "scripts": {
     "serve": "firebase emulators:start --only functions,firestore",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test": "node --test test_triggers.js",
+    "lint": "node --check index.js && node --check test_triggers.js"
   },
   "dependencies": {
     "firebase-admin": "^13.0.0",
