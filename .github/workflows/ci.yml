@@ -65,7 +65,7 @@ jobs:
           echo "Line coverage: ${pct}% (minimum ${MIN_COVERAGE}%)"
           echo "### Coverage: ${pct}% (minimum ${MIN_COVERAGE}%)" >> "$GITHUB_STEP_SUMMARY"
           awk -v p="$pct" -v m="$MIN_COVERAGE" 'BEGIN{exit !(p+0 >= m+0)}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-lcov
@@ -110,7 +110,7 @@ jobs:
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           script: patrol test --verbose
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: patrol-reports
@@ -137,7 +137,7 @@ jobs:
       # The demo entrypoint needs no google-services.json, which is not in
       # the repo. The real build happens in release.yml with secrets.
       - run: flutter build apk --debug -t lib/main_demo.dart
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: demo-apk
           path: build/app/outputs/flutter-apk/app-debug.apk
