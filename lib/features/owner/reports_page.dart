@@ -128,7 +128,7 @@ class _ReportsPageState extends State<ReportsPage> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 final deliveries = delSnap.data ?? const <Delivery>[];
-                final calc = const ReportCalculator();
+                const calc = ReportCalculator();
                 final summary = calc.summarise(
                   deliveries: deliveries,
                   ratePerLitre: rate,

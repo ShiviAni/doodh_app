@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/customer.dart';
 import '../../data/models/payment.dart';
@@ -54,14 +55,16 @@ class _CashLogSheetState extends State<CashLogSheet> {
 
   void _submit() {
     if (_amount <= 0) return;
-    sl<PaymentRepository>().create(
-      Payment(
-        id: '',
-        customerId: widget.customer.id,
-        amount: _amount,
-        method: PaymentMethod.cash,
-        dayKey: widget.dayKey,
-        recordedBy: widget.recordedBy,
+    fireAndForget(
+      sl<PaymentRepository>().create(
+        Payment(
+          id: '',
+          customerId: widget.customer.id,
+          amount: _amount,
+          method: PaymentMethod.cash,
+          dayKey: widget.dayKey,
+          recordedBy: widget.recordedBy,
+        ),
       ),
     );
     Navigator.of(context).pop();

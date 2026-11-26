@@ -8,6 +8,20 @@ import 'package:equatable/equatable.dart';
 /// the delivery role the moment it read the customer's name. Money lives in
 /// separate owner-only collections instead.
 class Customer extends Equatable {
+  factory Customer.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data() ?? const {};
+    return Customer(
+      id: doc.id,
+      name: (d['name'] as String?) ?? '',
+      nameHi: d['nameHi'] as String?,
+      houseNo: (d['houseNo'] as String?) ?? '',
+      phone: d['phone'] as String?,
+      photoUrl: d['photoUrl'] as String?,
+      defaultQtyLitres: (d['defaultQtyLitres'] as num?)?.toDouble() ?? 1.0,
+      routeOrder: (d['routeOrder'] as num?)?.toInt() ?? 0,
+      active: (d['active'] as bool?) ?? true,
+    );
+  }
   const Customer({
     required this.id,
     required this.name,
@@ -39,21 +53,6 @@ class Customer extends Equatable {
 
   String displayName({required bool hindi}) =>
       hindi && (nameHi?.isNotEmpty ?? false) ? nameHi! : name;
-
-  factory Customer.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? const {};
-    return Customer(
-      id: doc.id,
-      name: (d['name'] as String?) ?? '',
-      nameHi: d['nameHi'] as String?,
-      houseNo: (d['houseNo'] as String?) ?? '',
-      phone: d['phone'] as String?,
-      photoUrl: d['photoUrl'] as String?,
-      defaultQtyLitres: (d['defaultQtyLitres'] as num?)?.toDouble() ?? 1.0,
-      routeOrder: (d['routeOrder'] as num?)?.toInt() ?? 0,
-      active: (d['active'] as bool?) ?? true,
-    );
-  }
 
   Map<String, dynamic> toMap() => {
     'name': name,

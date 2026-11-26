@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/customer.dart';
 import '../../data/models/delivery.dart';
@@ -116,7 +117,7 @@ class RoundController extends ChangeNotifier {
     final index = _customers.indexWhere((c) => c.id == customerId);
     if (index == -1) return;
 
-    unawaited(
+    fireAndForget(
       deliveries.record(
         dayKey: dayKey,
         customerId: customerId,
@@ -144,12 +145,4 @@ class RoundController extends ChangeNotifier {
     if (advance && _index < _customers.length - 1) _index++;
     notifyListeners();
   }
-}
-
-/// Local `unawaited` so this file needn't pull in dart:async for one call.
-void unawaited(Future<void> future) {
-  future.catchError((Object _) {
-    // Firestore retries queued writes itself; a failure here means the write
-    // is still pending, not lost. The sync badge is what surfaces that.
-  });
 }

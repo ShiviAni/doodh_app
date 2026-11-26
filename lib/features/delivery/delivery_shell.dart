@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/di/injector.dart';
@@ -48,7 +49,7 @@ class _DeliveryShellState extends State<DeliveryShell> {
     super.initState();
     // Warm the recogniser up front so the first tap on the mic starts
     // listening immediately rather than after a visible pause.
-    _speech.initialise();
+    unawaited(_speech.initialise());
   }
 
   @override

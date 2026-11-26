@@ -9,6 +9,16 @@ enum MemberRole { owner, delivery }
 /// security rules resolve a role straight from `request.auth.token.email` with
 /// no Cloud Function and no uid-claiming step.
 class Member extends Equatable {
+  factory Member.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data() ?? const {};
+    return Member(
+      email: doc.id,
+      role: d['role'] == 'owner' ? MemberRole.owner : MemberRole.delivery,
+      displayName: (d['displayName'] as String?) ?? doc.id,
+      phone: d['phone'] as String?,
+      active: (d['active'] as bool?) ?? true,
+    );
+  }
   const Member({
     required this.email,
     required this.role,
@@ -25,17 +35,6 @@ class Member extends Equatable {
 
   bool get isOwner => role == MemberRole.owner;
   bool get isDelivery => role == MemberRole.delivery;
-
-  factory Member.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? const {};
-    return Member(
-      email: doc.id,
-      role: d['role'] == 'owner' ? MemberRole.owner : MemberRole.delivery,
-      displayName: (d['displayName'] as String?) ?? doc.id,
-      phone: d['phone'] as String?,
-      active: (d['active'] as bool?) ?? true,
-    );
-  }
 
   Map<String, dynamic> toMap() => {
     'role': role.name,

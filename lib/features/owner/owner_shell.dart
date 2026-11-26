@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/di/injector.dart';
@@ -33,7 +34,7 @@ class _OwnerShellState extends State<OwnerShell> {
     super.initState();
     // Owner devices only. Registering a delivery phone here would put it in the
     // owner-token list and send it notifications about its own work.
-    sl<PushService>().startForOwner();
+    unawaited(sl<PushService>().startForOwner());
   }
 
   @override

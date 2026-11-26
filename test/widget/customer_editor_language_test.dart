@@ -28,7 +28,7 @@ void main() {
     );
   });
 
-  tearDown(() => sl.reset());
+  tearDown(sl.reset);
 
   Widget host(AppLanguage lang) => LanguageScope(
     initial: lang,

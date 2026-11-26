@@ -28,6 +28,24 @@ enum ActivityType {
 /// the history has to record what *happened to the data*, so it cannot depend
 /// on the client choosing to report it. A modified APK still trips the trigger.
 class Activity extends Equatable {
+  factory Activity.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data() ?? const {};
+    return Activity(
+      id: doc.id,
+      type: ActivityType.parse(d['type'] as String?),
+      actorEmail: (d['actorEmail'] as String?) ?? '',
+      at: (d['at'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      customerId: d['customerId'] as String?,
+      customerName: d['customerName'] as String?,
+      dayKey: d['dayKey'] as String?,
+      beforeLitres: (d['beforeLitres'] as num?)?.toDouble(),
+      afterLitres: (d['afterLitres'] as num?)?.toDouble(),
+      beforeStatus: d['beforeStatus'] as String?,
+      afterStatus: d['afterStatus'] as String?,
+      amount: (d['amount'] as num?)?.toDouble(),
+      reason: d['reason'] as String?,
+    );
+  }
   const Activity({
     required this.id,
     required this.type,
@@ -69,25 +87,6 @@ class Activity extends Equatable {
   final String? reason;
 
   bool get isChange => beforeLitres != null || beforeStatus != null;
-
-  factory Activity.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? const {};
-    return Activity(
-      id: doc.id,
-      type: ActivityType.parse(d['type'] as String?),
-      actorEmail: (d['actorEmail'] as String?) ?? '',
-      at: (d['at'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      customerId: d['customerId'] as String?,
-      customerName: d['customerName'] as String?,
-      dayKey: d['dayKey'] as String?,
-      beforeLitres: (d['beforeLitres'] as num?)?.toDouble(),
-      afterLitres: (d['afterLitres'] as num?)?.toDouble(),
-      beforeStatus: d['beforeStatus'] as String?,
-      afterStatus: d['afterStatus'] as String?,
-      amount: (d['amount'] as num?)?.toDouble(),
-      reason: d['reason'] as String?,
-    );
-  }
 
   @override
   List<Object?> get props => [id, type, actorEmail, at, customerId, dayKey];

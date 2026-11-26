@@ -11,6 +11,23 @@ enum DeliveryStatus { delivered, skipped }
 /// determinism is what makes replaying the offline write queue safe — a repeat
 /// sync overwrites the same document rather than creating a duplicate.
 class Delivery extends Equatable {
+  factory Delivery.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data() ?? const {};
+    return Delivery(
+      id: doc.id,
+      dayKey: (d['dayKey'] as String?) ?? '',
+      customerId: (d['customerId'] as String?) ?? '',
+      qtyLitres: (d['qtyLitres'] as num?)?.toDouble() ?? 0,
+      status: d['status'] == 'skipped'
+          ? DeliveryStatus.skipped
+          : DeliveryStatus.delivered,
+      recordedBy: (d['recordedBy'] as String?) ?? '',
+      recordedAt: (d['recordedAt'] as Timestamp?)?.toDate(),
+      editedBy: d['editedBy'] as String?,
+      editedAt: (d['editedAt'] as Timestamp?)?.toDate(),
+      editReason: d['editReason'] as String?,
+    );
+  }
   const Delivery({
     required this.id,
     required this.dayKey,
@@ -46,24 +63,6 @@ class Delivery extends Equatable {
   /// Skipped houses record 0 L, so summing [effectiveLitres] over a range is
   /// always correct regardless of status.
   double get effectiveLitres => isDelivered ? qtyLitres : 0;
-
-  factory Delivery.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? const {};
-    return Delivery(
-      id: doc.id,
-      dayKey: (d['dayKey'] as String?) ?? '',
-      customerId: (d['customerId'] as String?) ?? '',
-      qtyLitres: (d['qtyLitres'] as num?)?.toDouble() ?? 0,
-      status: d['status'] == 'skipped'
-          ? DeliveryStatus.skipped
-          : DeliveryStatus.delivered,
-      recordedBy: (d['recordedBy'] as String?) ?? '',
-      recordedAt: (d['recordedAt'] as Timestamp?)?.toDate(),
-      editedBy: d['editedBy'] as String?,
-      editedAt: (d['editedAt'] as Timestamp?)?.toDate(),
-      editReason: d['editReason'] as String?,
-    );
-  }
 
   /// [recordedAt] uses a server timestamp so an unsynced phone with a wrong
   /// clock cannot distort the record; [deviceRecordedAt] keeps the local time

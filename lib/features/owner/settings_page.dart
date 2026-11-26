@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/member.dart';
 import '../../data/repositories/member_repository.dart';
@@ -140,7 +141,7 @@ class _RateEditorState extends State<_RateEditor> {
                   onPressed: () {
                     final v = double.tryParse(_controller.text.trim());
                     if (v != null && v > 0) {
-                      sl<SettingsRepository>().setRate(v);
+                      fireAndForget(sl<SettingsRepository>().setRate(v));
                       FocusScope.of(context).unfocus();
                     }
                   },
@@ -309,13 +310,15 @@ class _MemberEditorState extends State<_MemberEditor> {
             onPressed: () {
               final email = _email.text.trim().toLowerCase();
               if (!email.contains('@')) return;
-              sl<MemberRepository>().upsert(
-                Member(
-                  email: email,
-                  role: _role,
-                  displayName: _name.text.trim().isEmpty
-                      ? email
-                      : _name.text.trim(),
+              fireAndForget(
+                sl<MemberRepository>().upsert(
+                  Member(
+                    email: email,
+                    role: _role,
+                    displayName: _name.text.trim().isEmpty
+                        ? email
+                        : _name.text.trim(),
+                  ),
                 ),
               );
               Navigator.of(context).pop();

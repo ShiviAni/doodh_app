@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/bill.dart';
 import '../../data/models/customer.dart';
@@ -64,7 +65,7 @@ class _MoneyPageState extends State<MoneyPage> {
                   ),
                   builder: (context, delSnap) {
                     final deliveries = delSnap.data ?? const <Delivery>[];
-                    final calc = const ReportCalculator();
+                    const calc = ReportCalculator();
 
                     final bills = <String, Bill>{
                       for (final c in customers)
@@ -475,16 +476,18 @@ class _RecordPaymentSheetState extends State<_RecordPaymentSheet> {
   void _save() {
     final value = double.tryParse(_amount.text.trim());
     if (value == null || value <= 0) return;
-    sl<PaymentRepository>().create(
-      Payment(
-        id: '',
-        customerId: widget.customer.id,
-        amount: value,
-        method: _method,
-        dayKey: DateKeys.day(DateTime.now()),
-        recordedBy: widget.approverEmail,
-        approved: true,
-        approvedBy: widget.approverEmail,
+    fireAndForget(
+      sl<PaymentRepository>().create(
+        Payment(
+          id: '',
+          customerId: widget.customer.id,
+          amount: value,
+          method: _method,
+          dayKey: DateKeys.day(DateTime.now()),
+          recordedBy: widget.approverEmail,
+          approved: true,
+          approvedBy: widget.approverEmail,
+        ),
       ),
     );
     Navigator.of(context).pop();

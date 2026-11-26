@@ -10,6 +10,24 @@ enum PaymentMethod { cash, upi, other }
 /// running total or a due. Anything he creates lands with [approved] false and
 /// only counts towards a balance once the owner approves it.
 class Payment extends Equatable {
+  factory Payment.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final d = doc.data() ?? const {};
+    return Payment(
+      id: doc.id,
+      customerId: (d['customerId'] as String?) ?? '',
+      amount: (d['amount'] as num?)?.toDouble() ?? 0,
+      method: PaymentMethod.values.firstWhere(
+        (m) => m.name == d['method'],
+        orElse: () => PaymentMethod.cash,
+      ),
+      dayKey: (d['dayKey'] as String?) ?? '',
+      recordedBy: (d['recordedBy'] as String?) ?? '',
+      approved: (d['approved'] as bool?) ?? false,
+      approvedBy: d['approvedBy'] as String?,
+      recordedAt: (d['recordedAt'] as Timestamp?)?.toDate(),
+      note: d['note'] as String?,
+    );
+  }
   const Payment({
     required this.id,
     required this.customerId,
@@ -33,25 +51,6 @@ class Payment extends Equatable {
   final String? approvedBy;
   final DateTime? recordedAt;
   final String? note;
-
-  factory Payment.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final d = doc.data() ?? const {};
-    return Payment(
-      id: doc.id,
-      customerId: (d['customerId'] as String?) ?? '',
-      amount: (d['amount'] as num?)?.toDouble() ?? 0,
-      method: PaymentMethod.values.firstWhere(
-        (m) => m.name == d['method'],
-        orElse: () => PaymentMethod.cash,
-      ),
-      dayKey: (d['dayKey'] as String?) ?? '',
-      recordedBy: (d['recordedBy'] as String?) ?? '',
-      approved: (d['approved'] as bool?) ?? false,
-      approvedBy: d['approvedBy'] as String?,
-      recordedAt: (d['recordedAt'] as Timestamp?)?.toDate(),
-      note: d['note'] as String?,
-    );
-  }
 
   Map<String, dynamic> toMap() => {
     'customerId': customerId,

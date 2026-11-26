@@ -75,7 +75,7 @@ class PushService {
     // A token can rotate at any time — after a reinstall, a restore, or on
     // Android's own schedule. Without this the owner silently stops receiving
     // notifications and there is nothing on screen to explain why.
-    messaging.onTokenRefresh.listen((token) => _saveToken(token));
+    messaging.onTokenRefresh.listen(_saveToken);
   }
 
   Future<void> _registerToken(FirebaseMessaging messaging) async {

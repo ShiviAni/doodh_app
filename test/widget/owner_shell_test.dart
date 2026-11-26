@@ -38,15 +38,15 @@ void main() {
     );
   });
 
-  tearDown(() => sl.reset());
+  tearDown(sl.reset);
 
   Widget host() => LanguageScope(
     initial: AppLanguage.english,
     onChanged: (_) {},
     child: MaterialApp(
       theme: AppTheme.light(),
-      home: OwnerShell(
-        session: const Session(
+      home: const OwnerShell(
+        session: Session(
           email: DemoSeed.ownerEmail,
           member: Member(
             email: DemoSeed.ownerEmail,

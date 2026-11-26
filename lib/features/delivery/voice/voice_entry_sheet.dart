@@ -96,13 +96,13 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
   @override
   void initState() {
     super.initState();
-    _start();
+    unawaited(_start());
   }
 
   @override
   void dispose() {
     _watchdog?.cancel();
-    widget.speech.cancel();
+    unawaited(widget.speech.cancel());
     super.dispose();
   }
 
@@ -124,7 +124,7 @@ class _VoiceEntrySheetState extends State<VoiceEntrySheet> {
     _watchdog?.cancel();
     _watchdog = Timer(_firstWordTimeout, () {
       if (!mounted || _transcript.isNotEmpty) return;
-      widget.speech.cancel();
+      unawaited(widget.speech.cancel());
       setState(() {
         _listening = false;
         _heardNothing = true;

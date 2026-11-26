@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth_mocks/firebase_auth_mocks.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -91,11 +93,13 @@ class RolePicker extends StatelessWidget {
     final session = _session(role);
     // No overlay button to switch back — it covered the progress counter. The
     // Android back button already pops this route and returns to the picker.
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => role == MemberRole.owner
-            ? OwnerShell(session: session)
-            : DeliveryShell(session: session),
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => role == MemberRole.owner
+              ? OwnerShell(session: session)
+              : DeliveryShell(session: session),
+        ),
       ),
     );
   }

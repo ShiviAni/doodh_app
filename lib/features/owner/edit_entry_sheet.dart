@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/di/injector.dart';
 import '../../core/l10n/strings.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/fire_and_forget.dart';
 import '../../core/utils/formats.dart';
 import '../../data/models/customer.dart';
 import '../../data/models/delivery.dart';
@@ -61,16 +62,18 @@ class _EditEntrySheetState extends State<EditEntrySheet> {
     // filling a blank house is an original entry, not a correction.
     final isCorrection = widget.existing != null;
 
-    sl<DeliveryRepository>().record(
-      dayKey: widget.dayKey,
-      customerId: widget.customer.id,
-      qtyLitres: _qty,
-      status: status,
-      recordedBy: widget.existing?.recordedBy ?? email,
-      editedBy: isCorrection ? email : null,
-      editReason: isCorrection
-          ? (_reason.text.trim().isEmpty ? '—' : _reason.text.trim())
-          : null,
+    fireAndForget(
+      sl<DeliveryRepository>().record(
+        dayKey: widget.dayKey,
+        customerId: widget.customer.id,
+        qtyLitres: _qty,
+        status: status,
+        recordedBy: widget.existing?.recordedBy ?? email,
+        editedBy: isCorrection ? email : null,
+        editReason: isCorrection
+            ? (_reason.text.trim().isEmpty ? '—' : _reason.text.trim())
+            : null,
+      ),
     );
     Navigator.of(context).pop();
   }
